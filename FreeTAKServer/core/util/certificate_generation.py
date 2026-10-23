@@ -1,9 +1,4 @@
 # !/usr/bin/python
-import subprocess
-try:
-    from OpenSSL import crypto
-except ImportError:
-    subprocess.run(["pip3", "install", "pyopenssl"], capture_output=True)
 from OpenSSL import crypto
 import os
 import getopt
@@ -19,10 +14,7 @@ import pathlib
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
 from werkzeug.utils import secure_filename
 
-try:
-    import requests
-except ImportError:
-    subprocess.run(["pip3", "install", "requests"], capture_output=True)
+import requests
 import hashlib
 
 # Make a connection to the MainConfig object for all routines below
