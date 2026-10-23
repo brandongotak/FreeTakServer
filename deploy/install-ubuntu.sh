@@ -38,6 +38,9 @@ sudo -u freetak "$PIP" install --upgrade pip setuptools wheel poetry-core
 # ruamel.yaml is very ornery and has to be force-reinstalled alone
 sudo -u freetak "$PIP" install --force-reinstall "ruamel.yaml<0.18"
 sudo -u freetak "$PIP" install --no-build-isolation "$APP_DIR/src"
+# the version number rarely changes, so force the FTS package itself to be
+# rebuilt so re-running this script after a git pull picks up code changes
+sudo -u freetak "$PIP" install --no-build-isolation --force-reinstall --no-deps "$APP_DIR/src"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "==> Writing $ENV_FILE"
