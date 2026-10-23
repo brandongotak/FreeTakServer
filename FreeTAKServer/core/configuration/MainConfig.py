@@ -435,7 +435,15 @@ class MainConfig:
         # sanitize and validate any path specified in config
         sanitized_path = ROOTPATH + os.path.relpath(os.path.normpath(os.path.join(os.sep, path)), os.sep)
 
-        if not os.access(sanitized_path, os.F_OK) or not os.access(sanitized_path, os.W_OK):
+        # paths such as the database file are created on first start, so a
+        # missing path is fine as long as its parent directory is writable
+        if os.path.exists(sanitized_path):
+            accessible = os.access(sanitized_path, os.W_OK)
+        else:
+            parent = os.path.dirname(sanitized_path)
+            accessible = os.path.isdir(parent) and os.access(parent, os.W_OK)
+
+        if not accessible:
             print(f"Cannot access configuration path: {sanitized_path}")
             sys.exit(1)
 
