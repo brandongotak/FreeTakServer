@@ -56,7 +56,8 @@ asyncio="3.4.3"
 xmltodict="*"
 pyzmq="*"
 digitalpy="0.3.13.7"
-opentelemetry-sdk="*"
+# 1.34 made BatchSpanProcessor.span_exporter read-only, which digitalpy sets
+opentelemetry-sdk="<1.34"
 PyJWT="*"
 FreeTAKServer_UI = {version = "2.2", optional = true}
 pytak = {version = "5.4.1", optional = true}
