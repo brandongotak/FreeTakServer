@@ -1,0 +1,26 @@
+[Unit]
+Description=FreeTAKServer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=freetak
+Group=freetak
+EnvironmentFile=/etc/freetakserver/fts.env
+WorkingDirectory=/opt/fts
+ExecStart=/opt/freetakserver/venv/bin/python -m FreeTAKServer.controllers.services.FTS
+Restart=on-failure
+RestartSec=5
+# FTS stops cleanly on SIGINT, same as Ctrl-C
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/fts /opt/freetakserver
+
+[Install]
+WantedBy=multi-user.target
