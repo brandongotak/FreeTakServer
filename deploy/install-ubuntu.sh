@@ -34,7 +34,8 @@ chown -R freetak:freetak "$APP_DIR" "$DATA_DIR"
 echo "==> Installing FreeTAKServer into $APP_DIR/venv"
 sudo -u freetak python3.11 -m venv "$APP_DIR/venv"
 PIP="$APP_DIR/venv/bin/pip"
-sudo -u freetak "$PIP" install --upgrade pip setuptools wheel poetry-core
+# digitalpy imports pkg_resources at runtime, which setuptools 81 removed
+sudo -u freetak "$PIP" install --upgrade pip "setuptools<81" wheel poetry-core
 # ruamel.yaml is very ornery and has to be force-reinstalled alone
 sudo -u freetak "$PIP" install --force-reinstall "ruamel.yaml<0.18"
 sudo -u freetak "$PIP" install --no-build-isolation "$APP_DIR/src"
