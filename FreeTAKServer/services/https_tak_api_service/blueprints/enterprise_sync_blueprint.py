@@ -87,7 +87,7 @@ def enterprise_sync_upload():
     filename = request.args.get("filename")
     creatorUid = request.args.get("creatorUid")
     tool = request.args.get("tool", "public")
-    return HTTPSTakApiCommunicationController().make_request("SaveEnterpriseSyncData", "", {"objecthash": request.args.get('hash'), "objectdata": request.files.getlist('assetfile')[0], "objkeywords": [filename, creatorUid, "missionpackage"], "objstarttime": "", "tool": tool}, None, True).get_value("objectid"), 200 # type: ignore
+    return HTTPSTakApiCommunicationController().make_request("SaveEnterpriseSyncData", "", {"objecthash": request.args.get('hash'), "objectdata": request.files.getlist('assetfile')[0], "file_name": filename, "creator_uid": creatorUid, "objkeywords": [filename, creatorUid, "missionpackage"], "objstarttime": "", "tool": tool}, None, True).get_value("objectid"), 200 # type: ignore
 
 @page.route('/Marti/sync/content', methods=["GET"])
 def specificPackage():
@@ -112,7 +112,7 @@ def upload():
     filename = secure_filename(request.args.get('filename')) # type: ignore
     creatorUid = request.args.get('creatorUid') # type: ignore
     tool: str = request.args.get('tool', "public") # type: ignore
-    HTTPSTakApiCommunicationController().make_request("SaveEnterpriseSyncData", "enterpriseSync", {"objectuid": request.args.get('hash'), "tool": tool, "objectdata": request.files.getlist('assetfile')[0].stream.read(), "objkeywords": [filename, creatorUid, "missionpackage"], "objstarttime": "", "synctype": "content", "mime_type": request.files.getlist('assetfile')[0].headers["Content-Type"]}).get_value("objectid"), 200 # type: ignore
+    HTTPSTakApiCommunicationController().make_request("SaveEnterpriseSyncData", "enterpriseSync", {"objectuid": request.args.get('hash'), "tool": tool, "objectdata": request.files.getlist('assetfile')[0].stream.read(), "file_name": filename, "creator_uid": creatorUid, "objkeywords": [filename, creatorUid, "missionpackage"], "objstarttime": "", "synctype": "content", "mime_type": request.files.getlist('assetfile')[0].headers["Content-Type"]}).get_value("objectid"), 200 # type: ignore
     return "https://" + config.DataPackageServiceDefaultIP + ':' + str(config.HTTPSTakAPIPort) + "/Marti/api/sync/metadata/" + file_hash + "/tool"
 
 @page.route('/Marti/sync/missionquery', methods=["GET"])
