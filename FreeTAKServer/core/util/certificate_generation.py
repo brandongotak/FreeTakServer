@@ -9,6 +9,7 @@ import uuid
 from jinja2 import Template
 import socket
 import zipfile
+import io
 import shutil
 import pathlib
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
@@ -184,25 +185,17 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
                                      port=str(config.SSLCoTServicePort))
     man = manifest_file_template.render(uid=random_id, server=server_address, server_filename=server_filename,
                                         user_filename=user_filename)
-    with open('fts.pref', 'w') as pref_file:
-        pref_file.write(pref)
-    with open('manifest.xml', 'w') as manifest_file:
-        manifest_file.write(man)
-    copyfile(config.p12Dir, server_filename)
-    copyfile(pathlib.Path(config.certsPath, user_filename), pathlib.Path(user_filename))
+    # write entries straight from their sources; staging copies in the working
+    # directory failed with "same file" whenever FTS ran from the certs folder
     with zipfile.ZipFile(
         pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip")),
         mode='w',
-        compresslevel=zipfile.ZIP_DEFLATED) as zipf:
+        compression=zipfile.ZIP_DEFLATED) as zipf:
 
-        zipf.write('fts.pref')
-        zipf.write('manifest.xml')
-        zipf.write(user_filename)
-        zipf.write(server_filename)
-
-
-    os.remove('fts.pref')
-    os.remove('manifest.xml')
+        zipf.writestr('fts.pref', pref)
+        zipf.writestr('manifest.xml', man)
+        zipf.write(pathlib.Path(config.certsPath, user_filename), arcname=user_filename)
+        zipf.write(config.p12Dir, arcname=server_filename)
 
 def generate_wintak_zip(server_address: str = None, server_filename: str = "", user_filename: str = "Client.p12",
                  cert_password: str = config.password, ssl_port: str = "8089") -> None:
@@ -277,46 +270,17 @@ def generate_wintak_zip(server_address: str = None, server_filename: str = "", u
     man_parent = manifest_file_parent_template.render(uid=new_uid, server=server_address,
                                                       folder=parentfolder,
                                                       internal_dp_name=f"{username.replace('./', '')}")
-    if not os.path.exists("./" + folder):
-        os.makedirs("./" + folder)
-    if not os.path.exists("./MANIFEST"):
-        os.makedirs("./MANIFEST")
-    with open('./' + folder + '/fts.pref', 'w') as pref_file:
-        pref_file.write(pref)
-    with open('./MANIFEST/manifest.xml', 'w') as manifest_file:
-        manifest_file.write(man)
-    copyfile(config.p12Dir, "./" + folder + "/" + server_filename)
-    copyfile(pathlib.Path(config.certsPath, user_filename), pathlib.Path(folder, user_filename))
-    zipf = zipfile.ZipFile(f"{username}.zip", 'w', zipfile.ZIP_DEFLATED)
-    for root, dirs, files in os.walk('./' + folder):
-        for file in files:
-            zipf.write(os.path.join(root, file))
-    for root, dirs, files in os.walk('./MANIFEST'):
-        for file in files:
-            zipf.write(os.path.join(root, file))
-    zipf.close()
-    shutil.rmtree("./MANIFEST")
-    shutil.rmtree("./" + folder)
+    # build both zips without staging files in the working directory
+    inner = io.BytesIO()
+    with zipfile.ZipFile(inner, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr(f"{folder}/fts.pref", pref)
+        zipf.write(config.p12Dir, arcname=f"{folder}/{server_filename}")
+        zipf.write(pathlib.Path(config.certsPath, user_filename), arcname=f"{folder}/{user_filename}")
+        zipf.writestr("MANIFEST/manifest.xml", man)
     # Create outer DP...because WinTAK
-    if not os.path.exists("./" + parentfolder):
-        os.makedirs("./" + parentfolder)
-    if not os.path.exists("./MANIFEST"):
-        os.makedirs("./MANIFEST")
-    with open('./MANIFEST/manifest.xml', 'w') as manifest_parent:
-        manifest_parent.write(man_parent)
-    copyfile(f"{username}.zip", pathlib.Path(parentfolder, f"{username}.zip"))
-    zipp = zipfile.ZipFile(str(pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip"))), 'w', zipfile.ZIP_DEFLATED)
-    for root, dirs, files in os.walk('./' + parentfolder):
-        for file in files:
-            name = str(pathlib.PurePath(pathlib.Path(root), pathlib.Path(file)))
-            zipp.write(name)
-    for root, dirs, files in os.walk('./MANIFEST'):
-        for file in files:
-            zipp.write(os.path.join(root, file))
-    zipp.close()
-    shutil.rmtree("./MANIFEST")
-    shutil.rmtree("./" + parentfolder)
-    os.remove(f"./{username}.zip")
+    with zipfile.ZipFile(str(pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip"))), 'w', zipfile.ZIP_DEFLATED) as zipp:
+        zipp.writestr(f"{parentfolder}/{username}.zip", inner.getvalue())
+        zipp.writestr("MANIFEST/manifest.xml", man_parent)
 
 
 class AtakOfTheCerts:
