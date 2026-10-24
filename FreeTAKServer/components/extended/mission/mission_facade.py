@@ -119,7 +119,15 @@ class Mission(DefaultFacade):
     @DefaultFacade.public
     def get_mission(self, *args, **kwargs):
         self.general_controller.get_mission(*args, **kwargs)
-        
+
+    @DefaultFacade.public
+    def delete_mission(self, *args, **kwargs):
+        self.general_controller.delete_mission(*args, **kwargs)
+
+    @DefaultFacade.public
+    def mission_deleted_notification(self, *args, **kwargs):
+        self.notification_controller.send_mission_deleted_notification(*args, **kwargs)
+
     @DefaultFacade.public
     def add_mission_contents(self, *args, **kwargs):
         self.general_controller.add_contents_to_mission(*args, **kwargs)

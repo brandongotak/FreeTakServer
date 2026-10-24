@@ -328,7 +328,32 @@ class MissionPersistenceController(Controller):
             return mission
         except Exception as ex:
             raise ex
-        
+
+    def delete_mission(self, mission: Mission, *args, **kwargs):
+        """this method is used to delete a mission and every row that references it.
+        the relationships don't cascade, so children are removed first; shared
+        log entries are kept and only unlinked from the mission.
+        """
+        try:
+            key = mission.PrimaryKey
+            # changes reference contents, cots and external data, so they go first
+            self.ses.query(MissionChange).filter(MissionChange.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(MissionInvitation).filter(MissionInvitation.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(Subscription).filter(Subscription.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(MissionContent).filter(MissionContent.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(MissionCoT).filter(MissionCoT.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(ExternalData).filter(ExternalData.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(MissionItem).filter(MissionItem.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(MissionLog).filter(MissionLog.mission_uid == key).delete(synchronize_session=False)
+            self.ses.query(MissionToMission).filter(
+                (MissionToMission.parent_mission_id == key) | (MissionToMission.child_mission_id == key)
+            ).delete(synchronize_session=False)
+            self.ses.delete(mission)
+            self.ses.commit()
+        except Exception as ex:
+            self.ses.rollback()
+            raise ex
+
     def add_parent_to_mission(self, child_mission:Mission, parent_mission: Mission, *args, **kwargs):
         try:
             mission_parent_rel: MissionToMission = MissionToMission()

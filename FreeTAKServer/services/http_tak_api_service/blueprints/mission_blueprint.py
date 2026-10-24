@@ -54,6 +54,16 @@ def get_mission(mission_id):
     print(out_data)
     return out_data
 
+@page.route('/Marti/api/missions/<mission_id>', methods=['DELETE'])
+def delete_mission(mission_id):
+    """delete a mission; only its creator or a MISSION_OWNER subscriber (creatorUid) may"""
+    response = HTTPTakApiCommunicationController().make_request("DeleteMission", "mission", {"mission_id": mission_id, "creatorUid": request.args.get("creatorUid", "")}, None, True)
+    status = response.get_value("status")
+    if status != 200:
+        return '', status
+    HTTPTakApiCommunicationController().make_request("MissionDeletedNotification", "mission", {"mission_name": response.get_value("mission_name"), "mission_tool": response.get_value("mission_tool"), "mission_creator": response.get_value("mission_creator")}, None, synchronous=False)
+    return response.get_value("mission"), 200
+
 @page.route('/Marti/api/missions/<mission_id>/cot', methods=['GET'])
 def get_mission_cots(mission_id):
     """get all cots for a mission"""

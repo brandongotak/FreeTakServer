@@ -57,6 +57,25 @@ class MissionNotificationController(Controller):
         self.response.set_value('recipients', "*")
         self.response.set_action("publish")
     
+    def send_mission_deleted_notification(self, mission_name: str, mission_tool: str, mission_creator: str, config_loader, *args, **kwargs):
+        """tell all clients a mission was deleted (t-x-m-d); the mission is already gone
+        from the database, so its details are passed in rather than looked up
+        """
+        mission_deletion_notification = self.domain_controller.create_mission_notification(config_loader)
+
+        mission_deletion_notification.uid = str(uuid4())
+        mission_deletion_notification.type = "t-x-m-d"
+        mission_deletion_notification.how = "h-g-i-g-o"
+        mission_deletion_notification.detail.mission.type = "DELETE"
+        mission_deletion_notification.detail.mission.tool = mission_tool
+        mission_deletion_notification.detail.mission.name = mission_name
+        mission_deletion_notification.detail.mission.authorUid = mission_creator
+
+        # Serializer called by service manager requires the message value
+        self.response.set_value('message', [mission_deletion_notification])
+        self.response.set_value('recipients', "*")
+        self.response.set_action("publish")
+
     def send_log_created_notification(self, log_id: str, config_loader, *args, **kwargs):
         mission_log = self.persistence_controller.get_log(log_id)
 

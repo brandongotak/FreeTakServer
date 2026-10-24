@@ -211,7 +211,40 @@ class MissionGeneralController(Controller):
         
         self.response.set_value("mission", serialized_mission_collection)
         return serialized_mission_collection
-    
+
+    def delete_mission(self, mission_id: str, creatorUid: str, config_loader, *args, **kwargs):
+        """delete a mission; only its creator or a client subscribed as MISSION_OWNER may do so.
+        responds with the deleted mission in json format, like the mission get endpoint
+        """
+        # every key is always set so the caller can read them whatever the outcome
+        self.response.set_value("mission", "")
+        self.response.set_value("mission_name", mission_id)
+        self.response.set_value("mission_tool", "public")
+        self.response.set_value("mission_creator", "")
+
+        mission = self.persistency_controller.get_mission(mission_id)
+        if mission is None:
+            self.response.set_value("status", 404)
+            return self.response
+
+        subscription = self.persistency_controller.get_subscription(mission, creatorUid) if creatorUid else None
+        is_owner = (bool(creatorUid) and creatorUid == mission.creatorUid) or (
+            subscription is not None and subscription.role is not None
+            and subscription.role.role_type == "MISSION_OWNER")
+        if not is_owner:
+            self.response.set_value("status", 403)
+            return self.response
+
+        mission_obj = self.mission_director.construct(mission, config_loader)
+        self.response.set_value("mission", serialize_to_json(mission_obj, self.request, self.execute_sub_action))
+        self.response.set_value("mission_name", mission.name)
+        self.response.set_value("mission_tool", mission.tool)
+        self.response.set_value("mission_creator", mission.creatorUid)
+
+        self.persistency_controller.delete_mission(mission)
+        self.response.set_value("status", 200)
+        return self.response
+
     def add_contents_to_mission(self, mission_id, config_loader, action_mapper, hashes=[], uids=[], *args, **kwargs):
         """add contents to a mission"""
         self.request.set_value("objecthashs", hashes)
