@@ -16,6 +16,7 @@ import qrcode
 import io
 from typing import Dict, List
 import time
+from eventlet import tpool
 from FreeTAKServer.services.rest_api_service.controllers.rest_api_communication_controller import RestAPICommunicationController
 
 
@@ -28,6 +29,7 @@ from digitalpy.core.parsing.formatter import Formatter
 from FreeTAKServer.core.configuration.CreateLoggerController import CreateLoggerController
 
 from FreeTAKServer.core.util import certificate_generation
+from FreeTAKServer.core.util import enrollment_setup
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -248,6 +250,36 @@ def updateSystemStatus(update):
     # TODO: add documentation
     changeStatus(json.loads(update))
     show_service_info()
+
+
+@socketio.on('enrollmentStatus')
+@socket_auth(session=session)
+def enrollmentStatus(empty=None):
+    """ report the Let's Encrypt certificate enrollment configuration
+    """
+    emit('enrollmentStatusUpdate', json.dumps(enrollment_setup.status()))
+
+
+@socketio.on('setupEnrollment')
+@socket_auth(session=session)
+def setupEnrollment(jsondata):
+    """ obtain a Let's Encrypt certificate for the given domain and enable
+    certificate enrollment; certbot can take a while, so it runs in a real
+    thread and the result is sent back to the requesting client only
+    """
+    data = json.loads(jsondata)
+    sid = request.sid
+
+    def run():
+        try:
+            ok, message = tpool.execute(enrollment_setup.setup, str(data.get("domain", "")),
+                                        str(data.get("email", "")))
+        except Exception as e:
+            logger.error(f"enrollment setup failed: {e}")
+            ok, message = False, f"enrollment setup failed: {e}"
+        socketio.emit('setupEnrollmentResult', json.dumps({"successful": ok, "message": message}), to=sid)
+
+    socketio.start_background_task(run)
 
 
 @socketio.on('systemUsers')
