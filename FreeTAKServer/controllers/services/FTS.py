@@ -1741,8 +1741,8 @@ if __name__ == "__main__":
             pass
 
         aotc = AtakOfTheCerts()
-        aotc.generate_ca(expiry_time_secs=31536000)
-        aotc.bake(common_name="server", cert="server", expiry_time_secs=31536000)
+        aotc.generate_ca(expiry_time_secs=config.CACertValidityDays * 86400)
+        aotc.bake(common_name="server", cert="server", expiry_time_secs=config.ServerCertValidityDays * 86400)
         aotc.bake(common_name="Client", cert="user", expiry_time_secs=31536000)
         import os
 
