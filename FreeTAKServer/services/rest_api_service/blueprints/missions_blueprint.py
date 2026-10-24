@@ -43,8 +43,10 @@ def delete_missions():
     deleted, failed = [], []
     for name in (request.get_json(silent=True) or {}).get("missions", []):
         response = RestAPICommunicationController().make_request("DeleteMission", "mission", {"mission_id": str(name), "creatorUid": "", "force": True}, None, True)
-        if response.get_value("status") != 200:
-            failed.append(name)
+        status = response.get_value("status")
+        if status != 200:
+            # 404 unknown mission; None means the mission component raised (see its DEBUG.log)
+            failed.append({"name": name, "status": status})
             continue
         RestAPICommunicationController().make_request("MissionDeletedNotification", "mission", {"mission_name": response.get_value("mission_name"), "mission_tool": response.get_value("mission_tool"), "mission_creator": response.get_value("mission_creator")}, None, synchronous=False)
         deleted.append(name)
