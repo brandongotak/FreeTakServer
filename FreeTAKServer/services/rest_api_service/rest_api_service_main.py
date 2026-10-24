@@ -30,6 +30,7 @@ from FreeTAKServer.core.configuration.CreateLoggerController import CreateLogger
 
 from FreeTAKServer.core.util import certificate_generation
 from FreeTAKServer.core.util import enrollment_setup
+from FreeTAKServer.core.util import connection_message
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -280,6 +281,29 @@ def setupEnrollment(jsondata):
         socketio.emit('setupEnrollmentResult', json.dumps({"successful": ok, "message": message}), to=sid)
 
     socketio.start_background_task(run)
+
+
+@socketio.on('connectionMessage')
+@socket_auth(session=session)
+def getConnectionMessage(empty=None):
+    """ report the chat message sent to clients when they connect
+    """
+    emit('connectionMessageUpdate', json.dumps(connection_message.get_settings()))
+
+
+@socketio.on('setConnectionMessage')
+@socket_auth(session=session)
+def setConnectionMessage(jsondata):
+    """ change or disable the connection message; the CoT services read it
+    on each new connection, so no restart is needed
+    """
+    data = json.loads(jsondata)
+    try:
+        settings = connection_message.save_settings(bool(data.get("enabled", True)), str(data.get("message", "")))
+        emit('connectionMessageUpdate', json.dumps(dict(settings, saved=True)))
+    except OSError as e:
+        logger.error(f"saving the connection message failed: {e}")
+        emit('connectionMessageUpdate', json.dumps(dict(connection_message.get_settings(), saved=False)))
 
 
 @socketio.on('systemUsers')

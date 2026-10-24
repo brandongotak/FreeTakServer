@@ -1,4 +1,5 @@
 from FreeTAKServer.core.configuration.OrchestratorConstants import OrchestratorConstants
+from FreeTAKServer.core.util import connection_message
 from FreeTAKServer.services.ssl_cot_service.controllers.SendDataController import SendDataController
 from digitalpy.core.main.object_factory import ObjectFactory
 from digitalpy.core.main.controller import Controller
@@ -148,9 +149,11 @@ class ClientConnectionController(Controller):
         from FreeTAKServer.model.FTSModel.Dest import Dest
         import uuid
 
-        if OrchestratorConstants().DEFAULTCONNECTIONGEOCHATOBJ != None:
+        # read on every connection so changes made from the UI apply without a restart
+        connection_remarks = connection_message.get_connection_remarks()
+        if connection_remarks is not None:
             ChatObj = RawCoT()
-            ChatObj.xmlString = f"<event><point/><detail><remarks>{OrchestratorConstants().DEFAULTCONNECTIONGEOCHATOBJ}</remarks><marti><dest/></marti></detail></event>"
+            ChatObj.xmlString = f"<event><point/><detail><remarks>{connection_remarks}</remarks><marti><dest/></marti></detail></event>"
 
             classobj = SendGeoChatController(ChatObj, AddToDB=False)
             instobj = classobj.getObject()
