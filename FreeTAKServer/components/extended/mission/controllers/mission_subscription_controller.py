@@ -94,9 +94,17 @@ class MissionSubscriptionController(Controller):
         mission_db_obj = self.persistency_controller.get_mission(mission_id)
         
         if mission_db_obj is not None:
-            token = self.token_controller.get_token(mission_db_obj)
-            
-            subscription_db_obj = self.persistency_controller.create_subscription(None, str(mission_id), token, client, mission_db_obj.defaultRole)
+            # resubscribing returns the existing subscription rather than adding a
+            # second one, and the creator always subscribes as MISSION_OWNER so it
+            # keeps MISSION_DELETE after unsubscribing and subscribing again
+            subscription_db_obj = self.persistency_controller.get_subscription(mission_db_obj, client)
+            if subscription_db_obj is None:
+                token = self.token_controller.get_token(mission_db_obj)
+                if client and client == mission_db_obj.creatorUid:
+                    role = self.persistency_controller.get_role("MISSION_OWNER")
+                else:
+                    role = mission_db_obj.defaultRole
+                subscription_db_obj = self.persistency_controller.create_subscription(None, str(mission_id), token, client, role)
             
             domain_subscription = self.domain_controller.create_mission_subscription(config_loader)
             
