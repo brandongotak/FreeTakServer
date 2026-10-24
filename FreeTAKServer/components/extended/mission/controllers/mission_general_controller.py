@@ -212,8 +212,9 @@ class MissionGeneralController(Controller):
         self.response.set_value("mission", serialized_mission_collection)
         return serialized_mission_collection
 
-    def delete_mission(self, mission_id: str, creatorUid: str, config_loader, *args, **kwargs):
-        """delete a mission; only its creator or a client subscribed as MISSION_OWNER may do so.
+    def delete_mission(self, mission_id: str, creatorUid: str, config_loader, force: bool = False, *args, **kwargs):
+        """delete a mission; only its creator or a client subscribed as MISSION_OWNER may do so,
+        unless force is set (used by the authenticated admin REST API).
         responds with the deleted mission in json format, like the mission get endpoint
         """
         # every key is always set so the caller can read them whatever the outcome
@@ -231,7 +232,7 @@ class MissionGeneralController(Controller):
         is_owner = (bool(creatorUid) and creatorUid == mission.creatorUid) or (
             subscription is not None and subscription.role is not None
             and subscription.role.role_type == "MISSION_OWNER")
-        if not is_owner:
+        if not (is_owner or force):
             self.response.set_value("status", 403)
             return self.response
 

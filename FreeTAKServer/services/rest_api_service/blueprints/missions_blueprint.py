@@ -33,3 +33,19 @@ def get_mission_table():
     except Exception as e:
         logger.error(str(e))
         return {"message":"An error occurred accessing mission details."}, 500
+
+@page.route("/MissionTable", methods=['DELETE'])
+@auth.login_required()
+def delete_missions():
+    """delete missions by name as an administrator, regardless of who created them;
+    expects {"missions": ["name", ...]} and notifies clients of each deletion
+    """
+    deleted, failed = [], []
+    for name in (request.get_json(silent=True) or {}).get("missions", []):
+        response = RestAPICommunicationController().make_request("DeleteMission", "mission", {"mission_id": str(name), "creatorUid": "", "force": True}, None, True)
+        if response.get_value("status") != 200:
+            failed.append(name)
+            continue
+        RestAPICommunicationController().make_request("MissionDeletedNotification", "mission", {"mission_name": response.get_value("mission_name"), "mission_tool": response.get_value("mission_tool"), "mission_creator": response.get_value("mission_creator")}, None, synchronous=False)
+        deleted.append(name)
+    return {"deleted": deleted, "failed": failed}, 200 if not failed else 207
