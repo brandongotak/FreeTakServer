@@ -22,7 +22,7 @@ class DataPackageServerConstants:
         self.versionInfo = config.version
         self.NodeID = 'FTS'
         # shown by clients as the server version; derived from the real FTS
-        # version ("FreeTAKServer-2.2.1" -> "2.2.1-FTS-RELEASE") instead of the
+        # version ("FreeTAKServer-2.3.0" -> "2.3.0-FTS-RELEASE") instead of the
         # old hardcoded "2.1 RC1"
         server_version = str(config.version).replace("FreeTAKServer-", "")
         self.VERSIONJSON = json.dumps({
