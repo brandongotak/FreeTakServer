@@ -71,6 +71,8 @@ class MainConfig:
         "SSLCoTServicePort": {"default": 8089, "type": int},
         "HTTPSTakAPIPort": {"default": 8443, "type": int},
         "HTTPTakAPIPort": {"default": 8080, "type": int},
+        # certificate enrollment (username/password) for TAK clients
+        "EnrollmentPort": {"default": 8446, "type": int},
         # this needs to be changed for private data packages to work
         "DataPackageServiceDefaultIP": {"default": _ip, "type": str},
         # User Connection package IP needs to be set to the IP which is
@@ -129,6 +131,12 @@ class MainConfig:
         "password": {"default": "supersecret", "type": str},
         "websocketkey": {"default": "YourWebsocketKey", "type": str},
         "CRLFile": {"default": Path(rf"{PERSISTENCE_PATH}/certs/FTS_CRL.json"), "type": str},
+        # publicly trusted (e.g. Let's Encrypt) cert and key served on the
+        # enrollment port so clients can enroll without importing a truststore
+        "EnrollmentCertFile": {"default": "", "type": str},
+        "EnrollmentKeyFile": {"default": "", "type": str},
+        # validity of client certificates issued through enrollment
+        "EnrollmentCertValidityDays": {"default": 365, "type": int},
         # set to None if you don't want a message sent
         "ConnectionMessage": {
             "default": f"Welcome to FreeTAKServer {FTS_VERSION}. The Parrot is not dead. It’s just resting",
@@ -234,6 +242,10 @@ class MainConfig:
         "FTS_CLIENT_CERT_PASSWORD": "password",
         "FTS_WEBSOCKET_KEY": "websocketkey",
         "FTS_CRLDIR": "CRLFile",
+        "FTS_ENROLLMENT_PORT": "EnrollmentPort",
+        "FTS_ENROLLMENT_CERTFILE": "EnrollmentCertFile",
+        "FTS_ENROLLMENT_KEYFILE": "EnrollmentKeyFile",
+        "FTS_ENROLLMENT_VALIDITY_DAYS": "EnrollmentCertValidityDays",
         "FTS_CONNECTION_MESSAGE": "ConnectionMessage",
         "FTS_DATABASE_TYPE": "DataBaseType",
         "FTS_CLIENT_PACKAGES_PATH": "ClientPackages",
@@ -287,6 +299,7 @@ class MainConfig:
             "FTS_FED_PORT": "FederationPort",
             "FTS_API_ADDRESS": "APIIP",
             "FTS_CLI_WHITELIST": "AllowCLIIPs",
+            "FTS_ENROLLMENT_PORT": "EnrollmentPort",
             # the number of routing workers to use
             "NumRoutingWorkers": {"default": 3, "type": int},
             # port to subscribe to requests by the routing proxy
@@ -346,6 +359,9 @@ class MainConfig:
             "FTS_CLIENT_CERT_PASSWORD": "password",
             "FTS_WEBSOCKET_KEY": "websocketkey",
             "FTS_CRLDIR": "CRLFile",
+            "FTS_ENROLLMENT_CERTFILE": "EnrollmentCertFile",
+            "FTS_ENROLLMENT_KEYFILE": "EnrollmentKeyFile",
+            "FTS_ENROLLMENT_VALIDITY_DAYS": "EnrollmentCertValidityDays",
         },
     }
 
