@@ -22,6 +22,7 @@ from FreeTAKServer.core.configuration.CreateLoggerController import CreateLogger
 from FreeTAKServer.core.configuration.DatabaseConfiguration import DatabaseConfiguration
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
+from FreeTAKServer.core.util import device_profile
 
 from .certificate_signing import (ORGANIZATION, ORGANIZATIONAL_UNIT, EnrollmentError, load_ca,
                                   parse_csr, sign_client_csr, to_base64_der)
@@ -107,10 +108,13 @@ def sign_client():
 
 @app.route("/Marti/api/tls/profile/enrollment", methods=["GET"])
 def enrollment_profile():
-    """clients ask for a device profile after enrolling; FTS has none to give"""
+    """clients ask for a device profile after enrolling; it enables channels for
+    this server, without which ATAK doesn't show its channels screen"""
     if authenticate() is None:
         return unauthorized()
-    return Response(status=204)
+    package = device_profile.profile_package(device_profile.request_host(request.host), "Enrollment")
+    return Response(package, 200, mimetype="application/zip",
+                    headers={"Content-Disposition": "attachment; filename=profile.zip"})
 
 
 def save_issued_certificate(username: str, client_uid: str, cert):

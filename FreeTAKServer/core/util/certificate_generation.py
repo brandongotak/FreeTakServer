@@ -13,6 +13,7 @@ import io
 import shutil
 import pathlib
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
+from FreeTAKServer.core.util import device_profile
 from werkzeug.utils import secure_filename
 
 import requests
@@ -156,6 +157,7 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
             <entry key="clientPassword" class="class java.lang.String">{{ cert_password }}</entry>
             <entry key="certificateLocation" class="class java.lang.String">/cert/{{ user_filename }}</entry>
         </preference>
+        <preference version="1" name="com.atakmap.app.civ_preferences">{{ channel_prefs }}</preference>
     </preferences>
     """)
 
@@ -182,7 +184,9 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
         server_address = config.UserConnectionIP
     pref = pref_file_template.render(server=server_address, server_filename=server_filename,
                                      user_filename=user_filename, cert_password=cert_password,
-                                     port=str(config.SSLCoTServicePort))
+                                     port=str(config.SSLCoTServicePort),
+                                     # enables ATAK's channels screen for this server
+                                     channel_prefs=device_profile.channel_pref_entries(server_address))
     man = manifest_file_template.render(uid=random_id, server=server_address, server_filename=server_filename,
                                         user_filename=user_filename)
     # write entries straight from their sources; staging copies in the working
@@ -225,6 +229,7 @@ def generate_wintak_zip(server_address: str = None, server_filename: str = "", u
             <entry key="clientPassword" class="class java.lang.String">{{ cert_password }}</entry>
             <entry key="certificateLocation" class="class java.lang.String">/storage/emulated/0/atak/cert/{{ user_filename }}</entry>
         </preference>
+        <preference version="1" name="com.atakmap.app.civ_preferences">{{ channel_prefs }}</preference>
     </preferences>
     """)
 
@@ -264,7 +269,9 @@ def generate_wintak_zip(server_address: str = None, server_filename: str = "", u
         server_address = config.UserConnectionIP
     pref = pref_file_template.render(server=server_address, server_filename=server_filename,
                                      user_filename=user_filename, cert_password=cert_password,
-                                     port=str(config.SSLCoTServicePort))
+                                     port=str(config.SSLCoTServicePort),
+                                     # enables ATAK's channels screen for this server
+                                     channel_prefs=device_profile.channel_pref_entries(server_address))
     man = manifest_file_template.render(uid=random_id, server=server_address, server_filename=server_filename,
                                         user_filename=user_filename, folder=folder)
     man_parent = manifest_file_parent_template.render(uid=new_uid, server=server_address,

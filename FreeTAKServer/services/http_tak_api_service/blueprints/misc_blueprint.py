@@ -2,6 +2,7 @@ import json
 from flask import Blueprint, request, make_response
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
 from FreeTAKServer.core.util import groups
+from FreeTAKServer.core.util import device_profile
 
 config = MainConfig.instance()
 page = Blueprint('misc', __name__)
@@ -16,6 +17,15 @@ def group_cache():
         "data": groups.groups_enabled(),
         "nodeId": config.nodeID
     }
+
+@page.route('/Marti/api/device/profile/connection', methods=["GET"])
+def connection_profile():
+    """the device profile clients fetch on connect (deviceProfileEnableOnConnect);
+    it keeps channels enabled for this server"""
+    from flask import Response
+    package = device_profile.profile_package(device_profile.request_host(request.host), "Connection")
+    return Response(package, 200, mimetype="application/zip",
+                    headers={"Content-Disposition": "attachment; filename=profile.zip"})
 
 @page.route('/Marti/api/clientEndPoints', methods=["GET"])
 def clientEndPoint():
