@@ -5,11 +5,18 @@ from ..configuration.ssl_cot_service_constants import MessageTypes
 
 from digitalpy.core.main.controller import Controller
 
+from FreeTAKServer.core.util import groups
+
 class SendComponentDataController(Controller):
     def __init__(self, logger) -> None:
         self.logger = logger
 
-    def send_message(self, connections, message, recipients, **kwargs):
+    def send_message(self, connections, message, recipients, source_groups=None, **kwargs):
+        # with groups enabled only connections sharing an active group with the
+        # sender receive the message; server generated messages have no source groups
+        if source_groups is not None and groups.groups_enabled():
+            connections = {oid: connection for oid, connection in connections.items()
+                           if groups.can_receive(source_groups, getattr(connection, "username", None))}
         message_type = self.determine_message_type(recipients)
         if message_type == MessageTypes.SEND_TO_ALL:
             self.send_message_to_all(connections, message)
@@ -24,7 +31,7 @@ class SendComponentDataController(Controller):
         Returns:
             MessageTypes: _description_
         """
-        if recipients == None or recipients == []:
+        if recipients is None or recipients == [] or recipients == "*" or recipients == ["*"]:
             return MessageTypes.SEND_TO_ALL
         else:
             return MessageTypes.SEND_TO_SOME

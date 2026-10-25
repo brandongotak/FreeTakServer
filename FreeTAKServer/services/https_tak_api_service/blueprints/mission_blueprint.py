@@ -2,6 +2,7 @@ import json
 from uuid import uuid4
 from flask import Blueprint, request
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
+from FreeTAKServer.core.util import groups
 from FreeTAKServer.services.https_tak_api_service.controllers.https_tak_api_communication_controller import HTTPSTakApiCommunicationController
 
 page = Blueprint("mission", __name__)
@@ -23,21 +24,24 @@ def get_invitations():
 
 @page.route('/Marti/api/groups/all')
 def get_groups():
+    """the calling user's groups (channels), identified by the client certificate"""
+    username = groups.username_for_common_name(request.environ.get("SSL_CLIENT_S_DN_CN"))
     return {
         "version": "3",
         "type": "com.bbn.marti.remote.groups.Group",
-        "data": [
-            {
-                "name": "__ANON__",
-                "direction": "OUT",
-                "created": "2023-02-22",
-                "type": "SYSTEM",
-                "bitpos": 2,
-                "active": True
-            }
-        ],
+        "data": groups.tak_group_list(username),
         "nodeId": config.nodeID
     }
+
+@page.route('/Marti/api/groups/active', methods=['PUT'])
+def set_active_groups():
+    """ATAK's channels screen: switch the calling user's groups on or off"""
+    entries = request.get_json(silent=True)
+    if not isinstance(entries, list):
+        return '', 400
+    username = groups.username_for_common_name(request.environ.get("SSL_CLIENT_S_DN_CN"))
+    groups.apply_tak_active_groups(username, entries)
+    return '', 200
     
 @page.route('/Marti/api/missions/<mission_id>', methods=['PUT'])
 def put_mission(mission_id):

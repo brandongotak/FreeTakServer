@@ -1,5 +1,6 @@
 from FreeTAKServer.core.configuration.OrchestratorConstants import OrchestratorConstants
 from FreeTAKServer.core.util import connection_message
+from FreeTAKServer.core.util import groups
 from FreeTAKServer.services.ssl_cot_service.controllers.SendDataController import SendDataController
 from digitalpy.core.main.object_factory import ObjectFactory
 from digitalpy.core.main.controller import Controller
@@ -73,6 +74,11 @@ class ClientConnectionController(Controller):
         connection = SSLCoTConnection(object_id)
         connection.model_object = clientInformation.modelObject
         connection.sock = clientInformation.socket
+        # the client certificate's CN identifies the system user, for group routing
+        try:
+            connection.username = groups.username_for_common_name(groups.peer_common_name(clientInformation.socket))
+        except Exception as ex:
+            self.logger.error(f"could not identify the user of {clientInformation.modelObject.uid}: {ex}")
         self.connections[str(connection.get_oid())] = connection
 
         return connection, clientInformation

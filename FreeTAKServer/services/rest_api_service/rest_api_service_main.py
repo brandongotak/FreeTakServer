@@ -31,6 +31,7 @@ from FreeTAKServer.core.configuration.CreateLoggerController import CreateLogger
 from FreeTAKServer.core.util import certificate_generation
 from FreeTAKServer.core.util import enrollment_setup
 from FreeTAKServer.core.util import connection_message
+from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -304,6 +305,31 @@ def setConnectionMessage(jsondata):
     except OSError as e:
         logger.error(f"saving the connection message failed: {e}")
         emit('connectionMessageUpdate', json.dumps(dict(connection_message.get_settings(), saved=False)))
+
+
+def groups_status():
+    return {"enabled": groups.groups_enabled(), "groups": groups.all_group_names()}
+
+
+@socketio.on('groupsStatus')
+@socket_auth(session=session)
+def getGroupsStatus(empty=None):
+    """ report whether group (channel) routing is on and which groups exist
+    """
+    emit('groupsStatusUpdate', json.dumps(groups_status()))
+
+
+@socketio.on('setGroupsEnabled')
+@socket_auth(session=session)
+def setGroupsEnabled(jsondata):
+    """ switch group routing on or off; the CoT services pick it up within seconds
+    """
+    try:
+        groups.set_groups_enabled(bool(json.loads(jsondata).get("enabled")))
+        emit('groupsStatusUpdate', json.dumps(dict(groups_status(), saved=True)))
+    except OSError as e:
+        logger.error(f"saving the groups setting failed: {e}")
+        emit('groupsStatusUpdate', json.dumps(dict(groups_status(), saved=False)))
 
 
 @socketio.on('systemUsers')

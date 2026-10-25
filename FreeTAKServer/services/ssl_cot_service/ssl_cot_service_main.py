@@ -2,6 +2,7 @@ from asyncio import Queue
 import threading
 import time
 import traceback
+from FreeTAKServer.core.util import groups
 from multiprocessing.pool import ThreadPool
 import os
 import multiprocessing
@@ -103,6 +104,8 @@ class SSLCoTServiceMain(DigitalPyService):
 
         # Contains info on clients
         self.client_information_queue = {}
+        # username of each connected client by CoT uid, for group routing
+        self.usernames_by_uid: Dict[str, str] = {}
         self.clientDataPipe: Queue
         self.connections: dict[str, SSLCoTConnection] = {} # meant to eventually obsolete the client information queue
 
@@ -268,7 +271,7 @@ class SSLCoTServiceMain(DigitalPyService):
                 span.set_status(Status(StatusCode.ERROR))
                 span.record_exception(ex)
 
-    def component_handler(self, xml_cot):
+    def component_handler(self, xml_cot, sender_uid=None):
         """this method is responsible for handling cases where the cot sent should
         be handled (parsed and manipulated) by a specific component it is
         responsible for calling the routing (via the async action mapper)
@@ -295,6 +298,10 @@ class SSLCoTServiceMain(DigitalPyService):
         request.set_context("XMLCoT")
         request.set_sender(self.__class__.__name__.lower())
         request.set_value("dictionary", dict_cot)
+        # the sender's active groups travel with the message so every CoT
+        # service can filter recipients (see FreeTAKServer.core.util.groups)
+        if groups.groups_enabled():
+            request.set_value("source_groups", groups.active_groups(self.usernames_by_uid.get(sender_uid)))
 
         # instantiate and define the response
         response = ObjectFactory.get_new_instance("response")
@@ -397,7 +404,8 @@ class SSLCoTServiceMain(DigitalPyService):
 
     def send_component_message(self, request, message):
         self.send_component_data_controller.send_message(
-            self.connections, message, request.get_value("recipients")
+            self.connections, message, request.get_value("recipients"),
+            source_groups=request.get_value("source_groups"),
         )
 
     def send_message(self, sender, message, use_share_pipe=True):
@@ -718,7 +726,7 @@ class SSLCoTServiceMain(DigitalPyService):
                         self.handle_disconnection(data_object.clientInformation)
                         continue
                     # Process the raw CoT data and serialize it
-                    self.component_handler(data_object.xmlString)
+                    self.component_handler(data_object.xmlString, data_object.clientInformation)
                     self.logger.debug(f"CoT serialized {data_object.xmlString}")
 
                 except Exception as ex:
@@ -746,6 +754,13 @@ class SSLCoTServiceMain(DigitalPyService):
         self.client_disconnection_controller.disconnect_socket(ssl_sock)
 
         connection_id = self.client_disconnection_controller.get_connection_id(client_information)
+        # connections were never pruned, so messages kept being sent to closed sockets;
+        # match on the client uid rather than rebuilding the connection id
+        uid = client_information if isinstance(client_information, str) else getattr(getattr(client_information, "modelObject", None), "uid", None)
+        for key in [key for key, connection in self.connections.items()
+                    if connection.model_object is not None and connection.model_object.uid == uid]:
+            del self.connections[key]
+        self.usernames_by_uid.pop(uid, None)
 
         iam_disconnect_request = self.client_disconnection_controller.create_iam_disconnect_request(connection_id)
         self.subject_send_request(iam_disconnect_request, APPLICATION_PROTOCOL)
@@ -766,6 +781,7 @@ class SSLCoTServiceMain(DigitalPyService):
                 receive_connection_output, self.dbController
             )
             self.client_connection_controller.save_client_to_db(client_information, self.dbController)
+            self.usernames_by_uid[client_information.modelObject.uid] = client_connection.username
             
             iam_request = self.client_connection_controller.create_iam_request(client_connection)
             self.subject_send_request(iam_request, APPLICATION_PROTOCOL)

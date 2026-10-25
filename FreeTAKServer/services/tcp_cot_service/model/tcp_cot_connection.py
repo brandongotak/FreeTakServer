@@ -16,6 +16,8 @@ class TCPCoTConnection(Connection):
         self._protocol = XML
         self._model_object: Event = None
         self._sock: socket = None
+        # system user identified from the client certificate; None means __ANON__
+        self.username = None
     
     @property
     def model_object(self):

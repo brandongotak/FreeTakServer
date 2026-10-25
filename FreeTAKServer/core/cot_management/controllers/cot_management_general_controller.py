@@ -114,7 +114,11 @@ class COTManagementGeneralController(Controller):
 
         for key, value in users_validated_response.get_values().items():
             self.response.set_value(key, value)
-        
+
+        # carry the sender's groups (set by the CoT service when groups are
+        # enabled) through to the services that deliver the message
+        self.response.set_value("source_groups", self.request.get_value("source_groups"))
+
         self.response.set_action("publish")
 
     def cot_event_chain_of_command(self, cot_model_object: CoTNode, cot_dict: str, action_mapper: ActionMapper, *args, **kwargs):

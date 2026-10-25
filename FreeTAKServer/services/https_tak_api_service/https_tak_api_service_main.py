@@ -337,6 +337,18 @@ from FreeTAKServer.model.sockets.SSLServerSocket import SSLServerSocket
 from FreeTAKServer.core.connection.SSLSocketController import SSLSocketController
 
 from .blueprints import excheck_blueprint, citrap_blueprint, misc_blueprint, mission_blueprint, enterprise_sync_blueprint
+from FreeTAKServer.core.util import groups
+
+
+class ClientCertHttpProtocol(wsgi.HttpProtocol):
+    """puts the client certificate's CN in the WSGI environ as SSL_CLIENT_S_DN_CN,
+    so endpoints such as /Marti/api/groups/all know which user is calling"""
+    def get_environ(self):
+        environ = super().get_environ()
+        common_name = groups.peer_common_name(self.connection)
+        if common_name:
+            environ["SSL_CLIENT_S_DN_CN"] = common_name
+        return environ
 
 class HTTPSTakAPI(DigitalPyService):
      # a dictionary containing the request_id and response objects for all received requests
@@ -420,7 +432,8 @@ class HTTPSTakAPI(DigitalPyService):
             self.register_blueprints(app)
             wsgi.server(sock=wrap_ssl(listen((DataPackageServerConstants().IP, int(HTTPPORT))), keyfile=config.unencryptedKey,
                                       certfile=config.pemDir,
-                                      server_side=True, ca_certs=config.CA, cert_reqs=ssl.CERT_REQUIRED), site=app)
+                                      server_side=True, ca_certs=config.CA, cert_reqs=ssl.CERT_REQUIRED), site=app,
+                        protocol=ClientCertHttpProtocol)
         except Exception as e:
             logger.error('there has been an exception in Data Package service startup ' + str(e))
             return -1

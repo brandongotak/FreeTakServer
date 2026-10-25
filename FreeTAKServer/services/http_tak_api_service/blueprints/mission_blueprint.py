@@ -2,6 +2,7 @@ import json
 from uuid import uuid4
 from flask import Blueprint, request
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
+from FreeTAKServer.core.util import groups
 from FreeTAKServer.services.http_tak_api_service.controllers.http_tak_api_communication_controller import HTTPTakApiCommunicationController
 
 page = Blueprint("mission", __name__)
@@ -24,19 +25,12 @@ def get_invitations():
 
 @page.route('/Marti/api/groups/all')
 def get_groups():
+    """plain HTTP has no client certificate, so callers are anonymous"""
+    username = None
     return {
         "version": "3",
         "type": "com.bbn.marti.remote.groups.Group",
-        "data": [
-            {
-                "name": "__ANON__",
-                "direction": "OUT",
-                "created": "2023-02-22",
-                "type": "SYSTEM",
-                "bitpos": 2,
-                "active": True
-            }
-        ],
+        "data": groups.tak_group_list(username),
         "nodeId": config.nodeID
     }
     
