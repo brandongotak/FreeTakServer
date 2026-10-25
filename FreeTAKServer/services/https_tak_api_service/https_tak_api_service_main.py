@@ -340,6 +340,18 @@ from .blueprints import excheck_blueprint, citrap_blueprint, misc_blueprint, mis
 from FreeTAKServer.core.util import groups
 
 
+def create_tls_listener(address):
+    """listening socket requiring a client certificate signed by the FTS CA.
+    eventlet's wrap_ssl ignores cert_reqs, so the port used to run with
+    CERT_NONE: it never asked for a client certificate and accepted anyone"""
+    from eventlet.green import ssl as green_ssl
+    context = green_ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile=config.pemDir, keyfile=config.unencryptedKey)
+    context.load_verify_locations(cafile=config.CA)
+    context.verify_mode = ssl.CERT_REQUIRED
+    return context.wrap_socket(listen(address), server_side=True)
+
+
 class ClientCertHttpProtocol(wsgi.HttpProtocol):
     """puts the client certificate's CN in the WSGI environ as SSL_CLIENT_S_DN_CN,
     so endpoints such as /Marti/api/groups/all know which user is calling"""
@@ -430,9 +442,7 @@ class HTTPSTakAPI(DigitalPyService):
             self.SSLSocketController.changePort(HTTPPORT)
             self.setSSL(True)
             self.register_blueprints(app)
-            wsgi.server(sock=wrap_ssl(listen((DataPackageServerConstants().IP, int(HTTPPORT))), keyfile=config.unencryptedKey,
-                                      certfile=config.pemDir,
-                                      server_side=True, ca_certs=config.CA, cert_reqs=ssl.CERT_REQUIRED), site=app,
+            wsgi.server(sock=create_tls_listener((DataPackageServerConstants().IP, int(HTTPPORT))), site=app,
                         protocol=ClientCertHttpProtocol)
         except Exception as e:
             logger.error('there has been an exception in Data Package service startup ' + str(e))
