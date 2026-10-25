@@ -383,7 +383,7 @@ class AtakOfTheCerts:
             f.close()
 
     def _generate_certificate(self, common_name: str, p12path: str, pempath: str = config.pemDir,
-                              expiry_time_secs: int = 31536000) -> None:
+                              expiry_time_secs: int = 31536000, user_cert: bool = False) -> None:
         """
         Create a certificate and p12 file
         :param cn: Common Name for certificate
@@ -409,6 +409,11 @@ class AtakOfTheCerts:
             cert.set_issuer(ca_pem.get_subject())
             cert.set_pubkey(self.key)
             cert.set_version(2)
+            if user_cert:
+                # client auth plus the key usage TAK uses to mark clients that
+                # support channels (1.2.840.113549.1.9.7); ATAK enables its
+                # channels screen when its certificate carries it
+                cert.add_extensions([crypto.X509Extension(b"extendedKeyUsage", False, b"clientAuth,1.2.840.113549.1.9.7")])
             cert.sign(ca_key, "sha256")
             p12 = crypto.PKCS12()
             p12.set_privatekey(self.key)
@@ -437,7 +442,8 @@ class AtakOfTheCerts:
         pempath = pathlib.Path(config.certsPath,f"{common_name}.pem")
         p12path = pathlib.Path(config.certsPath,f"{common_name}.p12")
         self._generate_key(keypath)
-        self._generate_certificate(common_name=common_name, pempath=pempath, p12path=p12path, expiry_time_secs=expiry_time_secs)
+        self._generate_certificate(common_name=common_name, pempath=pempath, p12path=p12path, expiry_time_secs=expiry_time_secs,
+                                   user_cert=cert.lower() == "user")
         if cert.lower() == "server":
             copyfile(keypath, str(keypath) + ".unencrypted")
 

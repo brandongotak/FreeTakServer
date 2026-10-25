@@ -20,6 +20,11 @@ PEM_CERTIFICATE = re.compile(rb"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICA
 ORGANIZATION = "FreeTAKServer"
 ORGANIZATIONAL_UNIT = "Core Dev"
 
+# extended key usage TAK puts in client certificates of clients that support
+# channels (they enroll with a version parameter); ATAK enables its channels
+# screen when its certificate carries it
+CHANNELS_KEY_USAGE = x509.ObjectIdentifier("1.2.840.113549.1.9.7")
+
 
 class EnrollmentError(Exception):
     """raised when a CSR can't be signed for the enrolling user"""
@@ -54,7 +59,7 @@ def parse_csr(body: bytes) -> x509.CertificateSigningRequest:
 
 
 def sign_client_csr(csr: x509.CertificateSigningRequest, username: str, ca_cert: x509.Certificate,
-                    ca_key: RSAPrivateKey, validity_days: int) -> x509.Certificate:
+                    ca_key: RSAPrivateKey, validity_days: int, channels: bool = False) -> x509.Certificate:
     """issue a client certificate for the authenticated user
 
     the subject is built from the username rather than copied from the CSR, so
@@ -83,7 +88,8 @@ def sign_client_csr(csr: x509.CertificateSigningRequest, username: str, ca_cert:
             digital_signature=True, content_commitment=False, key_encipherment=True,
             data_encipherment=False, key_agreement=False, key_cert_sign=False,
             crl_sign=False, encipher_only=False, decipher_only=False), critical=True)
-        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=False)
+        .add_extension(x509.ExtendedKeyUsage(
+            [ExtendedKeyUsageOID.CLIENT_AUTH] + ([CHANNELS_KEY_USAGE] if channels else [])), critical=False)
         .add_extension(x509.SubjectKeyIdentifier.from_public_key(csr.public_key()), critical=False)
         .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), critical=False)
     )

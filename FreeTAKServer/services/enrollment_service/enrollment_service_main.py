@@ -84,7 +84,9 @@ def sign_client():
     try:
         csr = parse_csr(request.get_data())
         ca_cert, ca_key = load_ca(config.CA, config.CAkey)
-        cert = sign_client_csr(csr, username, ca_cert, ca_key, config.EnrollmentCertValidityDays)
+        # TAK clients that support channels pass a version parameter
+        cert = sign_client_csr(csr, username, ca_cert, ca_key, config.EnrollmentCertValidityDays,
+                               channels=request.args.get("version") is not None)
     except EnrollmentError as e:
         logger.error(f"enrollment for {username!r} rejected: {e}")
         return Response(str(e), 400)

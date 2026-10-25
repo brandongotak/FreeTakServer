@@ -308,7 +308,8 @@ def setConnectionMessage(jsondata):
 
 
 def groups_status():
-    return {"enabled": groups.groups_enabled(), "groups": groups.all_group_names()}
+    return {"enabled": groups.groups_enabled(), "groups": groups.all_group_names(),
+            "defined": groups.defined_groups()}
 
 
 @socketio.on('groupsStatus')
@@ -330,6 +331,30 @@ def setGroupsEnabled(jsondata):
     except OSError as e:
         logger.error(f"saving the groups setting failed: {e}")
         emit('groupsStatusUpdate', json.dumps(dict(groups_status(), saved=False)))
+
+
+@socketio.on('addGroup')
+@socket_auth(session=session)
+def addGroup(jsondata):
+    """ create a group so it can be picked when assigning users
+    """
+    try:
+        groups.add_defined_group(str(json.loads(jsondata).get("name", "")))
+        emit('groupsStatusUpdate', json.dumps(groups_status()))
+    except (ValueError, OSError) as e:
+        emit('groupsStatusUpdate', json.dumps(dict(groups_status(), error=str(e))))
+
+
+@socketio.on('removeGroup')
+@socket_auth(session=session)
+def removeGroup(jsondata):
+    """ stop offering a group; users who have it keep it until edited
+    """
+    try:
+        groups.remove_defined_group(str(json.loads(jsondata).get("name", "")))
+        emit('groupsStatusUpdate', json.dumps(groups_status()))
+    except OSError as e:
+        emit('groupsStatusUpdate', json.dumps(dict(groups_status(), error=str(e))))
 
 
 @socketio.on('systemUsers')

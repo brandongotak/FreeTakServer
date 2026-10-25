@@ -11,6 +11,7 @@ the persistence path, because the CoT services, the TAK API and the REST API
 run in separate processes; reads are cached for a few seconds."""
 import json
 import os
+import re
 import time
 from typing import Dict, Iterable, List, Optional
 
@@ -136,11 +137,37 @@ def set_active_groups(username: str, states: Dict[str, bool]) -> None:
     _save_settings(settings)
 
 
+GROUP_NAME_PATTERN = re.compile(r"^[A-Za-z0-9 _.\-]{1,50}$")
+
+
+def defined_groups() -> List[str]:
+    """groups created in the UI, offered when assigning users to groups"""
+    return sorted(_load_settings().get("defined", []))
+
+
+def add_defined_group(name: str) -> str:
+    """create a group; names can't contain commas (the user field is comma separated)"""
+    name = name.strip()
+    if not GROUP_NAME_PATTERN.match(name) or name == ANONYMOUS_GROUP:
+        raise ValueError("group names are 1-50 letters, digits, spaces, _ . or -")
+    settings = _load_settings(force=True)
+    settings["defined"] = sorted(set(settings.get("defined", [])) | {name})
+    _save_settings(settings)
+    return name
+
+
+def remove_defined_group(name: str) -> None:
+    """stop offering a group; users who already have it keep it until edited"""
+    settings = _load_settings(force=True)
+    settings["defined"] = [group for group in settings.get("defined", []) if group != name]
+    _save_settings(settings)
+
+
 def all_group_names() -> List[str]:
-    """every group assigned to any user, plus __ANON__, sorted"""
+    """every defined group and group assigned to any user, plus __ANON__, sorted"""
     with _db().connect() as connection:
         fields = connection.execute(text('SELECT "group" FROM "SystemUser"')).scalars().all()
-    names = {ANONYMOUS_GROUP}
+    names = {ANONYMOUS_GROUP} | set(defined_groups())
     for field in fields:
         names.update(parse_groups(field))
     return sorted(names)
