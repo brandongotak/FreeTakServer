@@ -338,6 +338,7 @@ from FreeTAKServer.core.connection.SSLSocketController import SSLSocketControlle
 
 from .blueprints import excheck_blueprint, citrap_blueprint, misc_blueprint, mission_blueprint, enterprise_sync_blueprint
 from FreeTAKServer.core.util import groups
+from FreeTAKServer.core.util import ui_access
 
 
 def create_tls_listener(address):
@@ -361,6 +362,15 @@ class ClientCertHttpProtocol(wsgi.HttpProtocol):
         if common_name:
             environ["SSL_CLIENT_S_DN_CN"] = common_name
         return environ
+
+
+@app.before_request
+def refuse_disabled_users():
+    """certificates of disabled users get no access to the TAK API"""
+    from flask import request as current_request
+    username = groups.username_for_common_name(current_request.environ.get("SSL_CLIENT_S_DN_CN"))
+    if ui_access.is_disabled(username):
+        return "account disabled", 403
 
 class HTTPSTakAPI(DigitalPyService):
      # a dictionary containing the request_id and response objects for all received requests

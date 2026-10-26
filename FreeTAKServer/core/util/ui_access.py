@@ -1,12 +1,16 @@
-"""which system users may sign in to the web UI
+"""which system users may sign in to the web UI, and which are disabled
 
 System users are also device accounts (ATAK enrollment, certificate
-packages); only those marked admin can sign in to the UI. The list lives in
-<persistence>/ui_access.json and starts out as just the built-in "admin"
-user."""
+packages); only those marked admin can sign in to the UI. A disabled user
+can't sign in to the UI, can't enroll, and their certificates are refused on
+the SSL CoT and HTTPS TAK API ports. The lists live in
+<persistence>/ui_access.json; admins start out as just the built-in "admin"
+user. Reads are cached briefly because the CoT services check on every
+message."""
 import hmac
 import json
 import os
+import time
 from typing import List, Optional
 
 from sqlalchemy import create_engine, text
@@ -18,8 +22,10 @@ config = MainConfig.instance()
 
 SETTINGS_FILE = os.path.join(str(config.persistencePath), "ui_access.json")
 DEFAULT_ADMINS = ["admin"]
+CACHE_SECONDS = 5
 
 _engine = None
+_cache = {"loaded": 0.0, "value": None}
 
 
 def _db():
@@ -29,31 +35,65 @@ def _db():
     return _engine
 
 
+def _load(force: bool = False) -> dict:
+    if force or time.monotonic() - _cache["loaded"] > CACHE_SECONDS:
+        try:
+            with open(SETTINGS_FILE) as settings_file:
+                value = json.load(settings_file)
+        except (OSError, ValueError):
+            value = {}
+        value.setdefault("admins", list(DEFAULT_ADMINS))
+        value.setdefault("disabled", [])
+        _cache.update(loaded=time.monotonic(), value=value)
+    return _cache["value"]
+
+
+def _save(settings: dict) -> None:
+    temporary_file = SETTINGS_FILE + ".tmp"
+    with open(temporary_file, "w") as settings_file:
+        json.dump({"admins": sorted(settings["admins"]), "disabled": sorted(settings["disabled"])}, settings_file)
+    os.replace(temporary_file, SETTINGS_FILE)
+    _cache.update(loaded=time.monotonic(), value=settings)
+
+
 def admins() -> List[str]:
-    try:
-        with open(SETTINGS_FILE) as settings_file:
-            return list(json.load(settings_file).get("admins", DEFAULT_ADMINS))
-    except (OSError, ValueError):
-        return list(DEFAULT_ADMINS)
+    return list(_load()["admins"])
 
 
 def is_admin(username: Optional[str]) -> bool:
-    return bool(username) and username in admins()
+    return bool(username) and username in _load()["admins"]
+
+
+def is_disabled(username: Optional[str]) -> bool:
+    return bool(username) and username in _load()["disabled"]
+
+
+def _enabled_admins(settings: dict) -> List[str]:
+    return [name for name in settings["admins"] if name not in settings["disabled"]]
 
 
 def set_admin(username: str, admin: bool) -> None:
-    """grant or revoke UI access; the last admin can't be removed, so the UI can't lock everyone out"""
-    current = admins()
-    if admin and username not in current:
-        current.append(username)
-    elif not admin and username in current:
-        if len(current) == 1:
-            raise ValueError("at least one user must keep web UI access")
-        current.remove(username)
-    temporary_file = SETTINGS_FILE + ".tmp"
-    with open(temporary_file, "w") as settings_file:
-        json.dump({"admins": sorted(current)}, settings_file)
-    os.replace(temporary_file, SETTINGS_FILE)
+    """grant or revoke UI access; the last enabled admin can't be removed, so the UI can't lock everyone out"""
+    settings = _load(force=True)
+    if admin and username not in settings["admins"]:
+        settings["admins"].append(username)
+    elif not admin and username in settings["admins"]:
+        if _enabled_admins(settings) == [username]:
+            raise ValueError("at least one enabled user must keep web UI access")
+        settings["admins"].remove(username)
+    _save(settings)
+
+
+def set_disabled(username: str, disabled: bool) -> None:
+    """disable or re-enable a user; the last enabled admin can't be disabled"""
+    settings = _load(force=True)
+    if disabled and username not in settings["disabled"]:
+        if _enabled_admins(settings) == [username]:
+            raise ValueError("the last enabled web UI admin can't be disabled")
+        settings["disabled"].append(username)
+    elif not disabled and username in settings["disabled"]:
+        settings["disabled"].remove(username)
+    _save(settings)
 
 
 def authenticate(username: str, password: str) -> Optional[str]:

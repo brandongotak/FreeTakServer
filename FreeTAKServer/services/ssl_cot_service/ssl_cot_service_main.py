@@ -3,6 +3,7 @@ import threading
 import time
 import traceback
 from FreeTAKServer.core.util import groups
+from FreeTAKServer.core.util import ui_access
 from multiprocessing.pool import ThreadPool
 import os
 import multiprocessing
@@ -725,6 +726,11 @@ class SSLCoTServiceMain(DigitalPyService):
                     elif data_object.xmlString == b"":
                         self.handle_disconnection(data_object.clientInformation)
                         continue
+                    # a user disabled while connected is dropped on their next message
+                    if ui_access.is_disabled(self.usernames_by_uid.get(data_object.clientInformation)):
+                        self.logger.info(f"disconnecting disabled user {self.usernames_by_uid.get(data_object.clientInformation)!r}")
+                        self.handle_disconnection(data_object.clientInformation)
+                        continue
                     # Process the raw CoT data and serialize it
                     self.component_handler(data_object.xmlString, data_object.clientInformation)
                     self.logger.debug(f"CoT serialized {data_object.xmlString}")
@@ -782,6 +788,11 @@ class SSLCoTServiceMain(DigitalPyService):
             )
             self.client_connection_controller.save_client_to_db(client_information, self.dbController)
             self.usernames_by_uid[client_information.modelObject.uid] = client_connection.username
+            # certificates of disabled users are refused
+            if ui_access.is_disabled(client_connection.username):
+                self.logger.info(f"refusing connection from disabled user {client_connection.username!r}")
+                self.handle_disconnection(client_information.modelObject.uid)
+                return 1
             
             iam_request = self.client_connection_controller.create_iam_request(client_connection)
             self.subject_send_request(iam_request, APPLICATION_PROTOCOL)

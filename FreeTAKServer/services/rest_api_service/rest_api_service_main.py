@@ -364,6 +364,21 @@ def revokeEnrollCode(jsondata):
     emit('enrollCodesUpdate', json.dumps(enroll_codes.active()))
 
 
+@socketio.on('setUserDisabled')
+@socket_auth(session=session)
+def setUserDisabled(jsondata):
+    """ disable or re-enable a system user: no web UI sign-in, no enrollment,
+    and their certificates are refused on the SSL CoT and HTTPS TAK API ports
+    """
+    data = json.loads(jsondata)
+    name = str(data.get("name", ""))
+    try:
+        ui_access.set_disabled(name, bool(data.get("disabled")))
+        emit('userDisabledUpdate', json.dumps({"name": name, "disabled": ui_access.is_disabled(name)}))
+    except (ValueError, OSError) as e:
+        emit('userDisabledUpdate', json.dumps({"name": name, "disabled": ui_access.is_disabled(name), "error": str(e)}))
+
+
 @socketio.on('setUserAdmin')
 @socket_auth(session=session)
 def setUserAdmin(jsondata):
@@ -457,6 +472,7 @@ def get_system_users():
         userjson["DeviceType"] = user.device_type
         # whether the user may sign in to the web UI
         userjson["Admin"] = ui_access.is_admin(user.name)
+        userjson["Disabled"] = ui_access.is_disabled(user.name)
         jsondata["SystemUsers"].append(userjson)
     return jsondata
 
@@ -494,6 +510,7 @@ def get_system_user(jsondata):
         userjson["DeviceType"] = user.device_type
         # whether the user may sign in to the web UI
         userjson["Admin"] = ui_access.is_admin(user.name)
+        userjson["Disabled"] = ui_access.is_disabled(user.name)
         jsondata["SystemUsers"].append(userjson)
     return jsondata
 
@@ -1351,6 +1368,8 @@ def authenticate_user():
         uid = ui_access.authenticate(username, request.args.get("password", ""))
         if uid is None:
             return {"message": "wrong user or password"}, 401
+        if ui_access.is_disabled(username):
+            return {"message": "this account is disabled"}, 403
         if not ui_access.is_admin(username):
             return {"message": "this account has no web UI access"}, 403
         return {"uid": uid}, 200

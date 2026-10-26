@@ -24,6 +24,7 @@ from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
 from FreeTAKServer.core.util import device_profile
 from FreeTAKServer.core.util import enroll_codes
+from FreeTAKServer.core.util import ui_access
 
 from .certificate_signing import (ORGANIZATION, ORGANIZATIONAL_UNIT, EnrollmentError, load_ca,
                                   parse_csr, sign_client_csr, to_base64_der)
@@ -52,6 +53,10 @@ def authenticate():
     """return the username if the request carries valid system user credentials, else None"""
     auth = request.authorization
     if auth is None or not auth.username or not auth.password:
+        return None
+    if ui_access.is_disabled(auth.username):
+        logger.info(f"enrollment refused for disabled user {auth.username!r} from {request.remote_addr}")
+        eventlet.sleep(FAILED_LOGIN_DELAY)
         return None
     with engine.connect() as connection:
         passwords = connection.execute(
