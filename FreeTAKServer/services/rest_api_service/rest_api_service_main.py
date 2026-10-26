@@ -32,6 +32,7 @@ from FreeTAKServer.core.util import certificate_generation
 from FreeTAKServer.core.util import enrollment_setup
 from FreeTAKServer.core.util import connection_message
 from FreeTAKServer.core.util import groups
+from FreeTAKServer.core.util import ui_access
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -312,6 +313,21 @@ def groups_status():
             "defined": groups.defined_groups()}
 
 
+@socketio.on('setUserAdmin')
+@socket_auth(session=session)
+def setUserAdmin(jsondata):
+    """ grant or revoke web UI access for a system user; replies with
+    userAdminUpdate (and an error if it was the last admin)
+    """
+    data = json.loads(jsondata)
+    name = str(data.get("name", ""))
+    try:
+        ui_access.set_admin(name, bool(data.get("admin")))
+        emit('userAdminUpdate', json.dumps({"name": name, "admin": ui_access.is_admin(name)}))
+    except (ValueError, OSError) as e:
+        emit('userAdminUpdate', json.dumps({"name": name, "admin": ui_access.is_admin(name), "error": str(e)}))
+
+
 @socketio.on('groupsStatus')
 @socket_auth(session=session)
 def getGroupsStatus(empty=None):
@@ -388,6 +404,8 @@ def get_system_users():
         userjson["Certs"] = user.certificate_package_name
         userjson["Uid"] = user.uid
         userjson["DeviceType"] = user.device_type
+        # whether the user may sign in to the web UI
+        userjson["Admin"] = ui_access.is_admin(user.name)
         jsondata["SystemUsers"].append(userjson)
     return jsondata
 
@@ -423,6 +441,8 @@ def get_system_user(jsondata):
         userjson["Certs"] = user.certificate_package_name
         userjson["Uid"] = user.uid
         userjson["DeviceType"] = user.device_type
+        # whether the user may sign in to the web UI
+        userjson["Admin"] = ui_access.is_admin(user.name)
         jsondata["SystemUsers"].append(userjson)
     return jsondata
 
@@ -1272,38 +1292,17 @@ def mapvid():
 @app.route("/AuthenticateUser", methods=["GET"])
 @auth.login_required
 def authenticate_user():
+    """check web UI sign-in credentials: 200 with the user's uid for admins,
+    403 for valid device-only accounts, 401 otherwise. The query used to be
+    built by pasting the username into the SQL"""
     try:
-        from .controllers.persistency import dbController
-        print('request made')
-        username = request.args.get("username")
-        password = request.args.get("password")
-        try:
-            user = dbController.query_systemUser(query=(f'name = "{username}"'))[0]
-        except Exception as e:
-            logger.error(str(e))
-            return None
-        if user.password == password:
-            print("query made")
-            user.metadata = None
-            user.query = None
-            user.query_class = None
-            user._decl_class_registry = None
-            user._sa_class_manager = None
-            user._sa_instance_state = None
-            user._modified_event = None
-            print("done setting to none")
-            json_user = user.__dict__
-            print(json_user)
-            del (json_user["_sa_class_manager"])
-            del (json_user["_sa_instance_state"])
-            del (json_user["_modified_event"])
-            del (json_user["_decl_class_registry"])
-            print('done defining dict')
-            return_data = json.dumps({"uid": json_user["uid"]})
-            print('returning data ' + str(return_data))
-            return return_data, 200
-        else:
-            return None
+        username = request.args.get("username", "")
+        uid = ui_access.authenticate(username, request.args.get("password", ""))
+        if uid is None:
+            return {"message": "wrong user or password"}, 401
+        if not ui_access.is_admin(username):
+            return {"message": "this account has no web UI access"}, 403
+        return {"uid": uid}, 200
     except Exception as e:
         logger.error(str(e))
         return {"message": "An error occurred authenticating user."}, 500
