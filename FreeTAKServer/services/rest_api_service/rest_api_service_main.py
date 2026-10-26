@@ -34,6 +34,7 @@ from FreeTAKServer.core.util import connection_message
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
 from FreeTAKServer.core.util import enroll_codes
+from FreeTAKServer.core.util import service_state
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -1773,6 +1774,12 @@ def changeStatus(jsonmessage):
             pass
         FTSObject.SSLDataPackageService.SSLDataPackageServiceIP = ip
         FTSObject.TCPDataPackageService.TCPDataPackageServiceIP = ip
+        # remember on/off so a restart doesn't turn switched-off services back on
+        for service, status in (("tcp_cot", FTSObject.CoTService.CoTServiceStatus),
+                                ("ssl_cot", FTSObject.SSLCoTService.SSLCoTServiceStatus),
+                                ("tcp_data_package", FTSObject.TCPDataPackageService.TCPDataPackageServiceStatus),
+                                ("ssl_data_package", FTSObject.SSLDataPackageService.SSLDataPackageServiceStatus)):
+            service_state.save_status(service, status)
         CommandPipe.put([functionNames.Status, FTSObject])
         out = CommandPipe.get()
         return {"message":'success'}, 200

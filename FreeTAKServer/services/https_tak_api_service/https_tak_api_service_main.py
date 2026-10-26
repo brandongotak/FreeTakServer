@@ -107,7 +107,8 @@ def init_config():
 
 @app.route('/')
 def hello():
-    return 'hello world'
+    # nothing lives at the root; this used to answer "hello world"
+    return '', 404
 
 
 @app.route('/Alive')

@@ -937,6 +937,24 @@ class FTS(DigitalPy):
 
         
             
+    def apply_saved_service_states(self, StartupObject):
+        """leave services switched off on the configure page off across restarts:
+        they aren't started (status "") and are recorded as stopped, so the UI
+        shows them off and switching them on starts them"""
+        from FreeTAKServer.core.util import service_state
+        for service, startup, current, attribute in (
+            ("tcp_cot", StartupObject.CoTService, self.FTSServiceStartupConfigObject.CoTService, "CoTServiceStatus"),
+            ("ssl_cot", StartupObject.SSLCoTService, self.FTSServiceStartupConfigObject.SSLCoTService, "SSLCoTServiceStatus"),
+            ("tcp_data_package", StartupObject.TCPDataPackageService,
+             self.FTSServiceStartupConfigObject.TCPDataPackageService, "TCPDataPackageServiceStatus"),
+            ("ssl_data_package", StartupObject.SSLDataPackageService,
+             self.FTSServiceStartupConfigObject.SSLDataPackageService, "SSLDataPackageServiceStatus"),
+        ):
+            if service_state.saved_status(service) == "stop":
+                setattr(startup, attribute, "")
+                setattr(current, attribute, "stop")
+                logger.info(f"{service} service stays off (switched off on the configure page)")
+
     # change object name to FTSServiceStartupConfigObject
     def start_all(self, FTSServiceStartupConfigObject):
         try:
@@ -1533,6 +1551,7 @@ class FTS(DigitalPy):
                 StartupObject.SSLCoTService.SSLCoTServiceStatus = "start"
                 StartupObject.SSLCoTService.SSLCoTServiceIP = SSLCoTIP
                 StartupObject.SSLCoTService.SSLCoTServicePort = SSLCoTPort
+                self.apply_saved_service_states(StartupObject)
                 self.configure(StartupObject)
                 self.register_components(StartupObject)
                 self.start_services()
