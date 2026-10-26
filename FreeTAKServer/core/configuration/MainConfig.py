@@ -141,6 +141,8 @@ class MainConfig:
         # every client certificate stops working when the CA expires
         "CACertValidityDays": {"default": 3650, "type": int},
         "ServerCertValidityDays": {"default": 3650, "type": int},
+        # days of REST API call records kept (see FreeTAKServer.core.util.retention)
+        "RetentionDays": {"default": 30, "type": int},
         # set to None if you don't want a message sent
         "ConnectionMessage": {
             "default": f"Welcome to FreeTAKServer {FTS_VERSION}. The Parrot is not dead. It’s just resting",
@@ -252,6 +254,7 @@ class MainConfig:
         "FTS_ENROLLMENT_VALIDITY_DAYS": "EnrollmentCertValidityDays",
         "FTS_CA_VALIDITY_DAYS": "CACertValidityDays",
         "FTS_SERVER_CERT_VALIDITY_DAYS": "ServerCertValidityDays",
+        "FTS_RETENTION_DAYS": "RetentionDays",
         "FTS_CONNECTION_MESSAGE": "ConnectionMessage",
         "FTS_DATABASE_TYPE": "DataBaseType",
         "FTS_CLIENT_PACKAGES_PATH": "ClientPackages",

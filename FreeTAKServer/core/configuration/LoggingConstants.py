@@ -18,7 +18,8 @@ class LoggingConstants:
         self.INFOLOG = str(PurePath(f"{config.LogFilePath}/{self.LOGNAME}_info.log"))
         self.HTTPLOG = str(PurePath(f"{config.LogFilePath}/{self.LOGNAME}_http.log"))
         self.DELIMITER = ' ? '
-        self.MAXFILESIZE = 100000000
+        # FTS writes about a dozen logs; 10 MB x 5 each keeps the total modest
+        self.MAXFILESIZE = 10000000
         self.BACKUPCOUNT = 5
         #orchestrator logs
         

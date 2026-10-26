@@ -97,6 +97,15 @@ def active() -> List[Dict]:
     return [{key: value for key, value in c.items() if key != "hash"} for c in _load() if _live(c, now)]
 
 
+def prune() -> int:
+    """drop codes that can no longer be used; returns how many"""
+    codes = _load()
+    live = [c for c in codes if _live(c, _now())]
+    if len(live) != len(codes):
+        _save(live)
+    return len(codes) - len(live)
+
+
 def revoke(code_id: str) -> None:
     _save([c for c in _load() if c["id"] != code_id])
 
