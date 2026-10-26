@@ -33,6 +33,7 @@ from FreeTAKServer.core.util import enrollment_setup
 from FreeTAKServer.core.util import connection_message
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
+from FreeTAKServer.core.util import enroll_codes
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -311,6 +312,56 @@ def setConnectionMessage(jsondata):
 def groups_status():
     return {"enabled": groups.groups_enabled(), "groups": groups.all_group_names(),
             "defined": groups.defined_groups()}
+
+
+@socketio.on('createEnrollQR')
+@socket_auth(session=session)
+def createEnrollQR(jsondata):
+    """ make a quick-connect QR code for a user: an enrollment code (instead of
+    their password) for ATAK's enroll link or iTAK's registration format.
+    Needs certificate enrollment with a publicly trusted certificate, since the
+    device must trust the enrollment port before it has any FTS certificate
+    """
+    data = json.loads(jsondata)
+    name = str(data.get("name", ""))
+    app = "itak" if data.get("app") == "itak" else "atak"
+    host = enrollment_setup.status().get("domain")
+    if not host:
+        emit('enrollQR', json.dumps({"error": "set up certificate enrollment (Configure page) first"}))
+        return
+    if name not in [user["Name"] for user in get_system_users()["SystemUsers"]]:
+        emit('enrollQR', json.dumps({"error": f"unknown user {name!r}"}))
+        return
+    try:
+        record = enroll_codes.create(name, int(data.get("hours", 24)), bool(data.get("oneDevice", True)))
+    except (ValueError, OSError) as e:
+        emit('enrollQR', json.dumps({"error": str(e)}))
+        return
+    if app == "itak":
+        payload = enroll_codes.itak_registration(host, int(config.SSLCoTServicePort), name, record["code"], record["id"])
+    else:
+        payload = enroll_codes.atak_link(host, name, record["code"])
+    emit('enrollQR', json.dumps({"username": name, "app": app, "expires": record["expires"],
+                                 "oneDevice": record["one_device"], "id": record["id"],
+                                 "image": enroll_codes.qr_png_data_uri(payload)}))
+    emit('enrollCodesUpdate', json.dumps(enroll_codes.active()))
+
+
+@socketio.on('enrollCodes')
+@socket_auth(session=session)
+def getEnrollCodes(empty=None):
+    """ list the quick-connect codes that still work
+    """
+    emit('enrollCodesUpdate', json.dumps(enroll_codes.active()))
+
+
+@socketio.on('revokeEnrollCode')
+@socket_auth(session=session)
+def revokeEnrollCode(jsondata):
+    """ stop a quick-connect code from working
+    """
+    enroll_codes.revoke(str(json.loads(jsondata).get("id", "")))
+    emit('enrollCodesUpdate', json.dumps(enroll_codes.active()))
 
 
 @socketio.on('setUserAdmin')

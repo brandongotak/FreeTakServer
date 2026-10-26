@@ -23,6 +23,7 @@ from FreeTAKServer.core.configuration.DatabaseConfiguration import DatabaseConfi
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
 from FreeTAKServer.core.util import device_profile
+from FreeTAKServer.core.util import enroll_codes
 
 from .certificate_signing import (ORGANIZATION, ORGANIZATIONAL_UNIT, EnrollmentError, load_ca,
                                   parse_csr, sign_client_csr, to_base64_der)
@@ -58,6 +59,9 @@ def authenticate():
         ).scalars().all()
     # passwords are stored as plain text by the system user API
     if any(stored and hmac.compare_digest(stored.encode(), auth.password.encode()) for stored in passwords):
+        return auth.username
+    # quick-connect QR codes carry an enrollment code in place of the password
+    if passwords and enroll_codes.verify(auth.username, auth.password):
         return auth.username
     logger.info(f"failed enrollment login for {auth.username!r} from {request.remote_addr}")
     eventlet.sleep(FAILED_LOGIN_DELAY)
