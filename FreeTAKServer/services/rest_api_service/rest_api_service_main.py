@@ -1477,8 +1477,12 @@ def authenticate_user():
             return {"message": "wrong user or password"}, 401
         if ui_access.is_disabled(username):
             return {"message": "this account is disabled"}, 403
-        # non-admins get the user portal only
-        return {"uid": uid, "admin": ui_access.is_admin(username)}, 200
+        admin = ui_access.is_admin(username)
+        # non-admins only get the user portal, and only from UIs that have one
+        # (they send portal=1); older UIs treat any 200 as an admin sign-in
+        if not admin and request.args.get("portal") != "1":
+            return {"message": "this account has no web UI access"}, 403
+        return {"uid": uid, "admin": admin}, 200
     except Exception as e:
         logger.error(str(e))
         return {"message": "An error occurred authenticating user."}, 500
