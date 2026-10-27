@@ -109,9 +109,11 @@ def sign_client():
     logger.info(f"signClient from {username!r}: User-Agent {request.headers.get('User-Agent', '')!r}, "
                 f"Accept {request.headers.get('Accept', '')!r}, version {request.args.get('version', '')!r}")
     signed, ca = to_base64_der(cert), to_base64_der(ca_cert)
-    # iOS clients (iTAK, and TROP, which sends no User-Agent) ask for text/plain
-    # and quietly drop the reply unless it carries the CA as both ca0 and ca1
-    ios_client = "itak" in request.headers.get("User-Agent", "").lower() or not request.headers.get("User-Agent")
+    # iOS clients (iTAK, TAK Aware, and TROP, which sends no User-Agent) quietly
+    # drop the reply unless it carries the CA as both ca0 and ca1; recognise them
+    # by Apple's networking stack rather than by app name
+    user_agent = request.headers.get("User-Agent", "").lower()
+    ios_client = not user_agent or any(marker in user_agent for marker in ("itak", "cfnetwork", "darwin"))
     wants_text = "text/plain" in accept and "application/json" not in accept
     if ios_client or wants_text:
         body = json.dumps({"signedCert": signed, "ca0": ca, "ca1": ca})
