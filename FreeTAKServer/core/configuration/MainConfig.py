@@ -143,6 +143,9 @@ class MainConfig:
         "ServerCertValidityDays": {"default": 3650, "type": int},
         # days of REST API call records kept (see FreeTAKServer.core.util.retention)
         "RetentionDays": {"default": 30, "type": int},
+        # MediaMTX's control API, and the RTSP port devices play its streams on
+        "VideoServerAPI": {"default": "http://127.0.0.1:9997", "type": str},
+        "VideoServerRTSPPort": {"default": 8554, "type": int},
         # set to None if you don't want a message sent
         "ConnectionMessage": {
             "default": f"Welcome to FreeTAKServer {FTS_VERSION}. The Parrot is not dead. It’s just resting",
@@ -255,6 +258,8 @@ class MainConfig:
         "FTS_CA_VALIDITY_DAYS": "CACertValidityDays",
         "FTS_SERVER_CERT_VALIDITY_DAYS": "ServerCertValidityDays",
         "FTS_RETENTION_DAYS": "RetentionDays",
+        "FTS_VIDEO_SERVER_API": "VideoServerAPI",
+        "FTS_VIDEO_RTSP_PORT": "VideoServerRTSPPort",
         "FTS_CONNECTION_MESSAGE": "ConnectionMessage",
         "FTS_DATABASE_TYPE": "DataBaseType",
         "FTS_CLIENT_PACKAGES_PATH": "ClientPackages",

@@ -35,6 +35,7 @@ from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
 from FreeTAKServer.core.util import enroll_codes
 from FreeTAKServer.core.util import service_state
+from FreeTAKServer.core.util import video_feeds
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.model.FTSModel.Event import Event
 from FreeTAKServer.model.RawCoT import RawCoT
@@ -308,6 +309,117 @@ def setConnectionMessage(jsondata):
     except OSError as e:
         logger.error(f"saving the connection message failed: {e}")
         emit('connectionMessageUpdate', json.dumps(dict(connection_message.get_settings(), saved=False)))
+
+
+def send_cot_to_all(xml):
+    """send a CoT made by the server to every connected device"""
+    from FreeTAKServer.core.SpecificCoTControllers.SendOtherController import SendOtherController
+    cot = RawCoT()
+    cot.xmlString = xml.encode()
+    APIPipe.put(SendOtherController(cot, addToDB=False).getObject())
+
+
+def video_status():
+    status = dict(video_feeds.settings(),
+                  feeds=[dict(feed, url=video_feeds.feed_url(feed)) for feed in video_feeds.feeds()])
+    try:
+        status["streams"] = video_feeds.live_streams()
+    except video_feeds.VideoError as e:
+        status["streams"], status["streamsError"] = [], str(e)
+    return status
+
+
+def emit_video_status(action):
+    """run a video page action and send back the new status with its message or error"""
+    try:
+        message = action()
+        status = dict(video_status(), message=message)
+    except (video_feeds.VideoError, OSError) as e:
+        status = dict(video_status(), error=str(e))
+    emit('videoStatusUpdate', json.dumps(status))
+
+
+@socketio.on('videoStatus')
+@socket_auth(session=session)
+def videoStatus(empty=None):
+    """ report video feeds and the streams on the video server
+    """
+    emit_video_status(lambda: None)
+
+
+@socketio.on('addVideoFeed')
+@socket_auth(session=session)
+def addVideoFeed(jsondata):
+    """ add a feed, for a URL or a video server stream, and send it to connected devices
+    """
+    data = json.loads(jsondata)
+
+    def add():
+        if data.get("stream"):
+            feed, created = video_feeds.add_stream(data["stream"], data.get("alias", ""), source="manual")
+        else:
+            feed, created = video_feeds.add_url(data.get("alias", ""), data.get("url", ""))
+        send_cot_to_all(video_feeds.announce_cot(feed))
+        return f"{feed['alias']} sent to devices" if created else f"{feed['alias']} is already a feed; sent it again"
+    emit_video_status(add)
+
+
+@socketio.on('removeVideoFeed')
+@socket_auth(session=session)
+def removeVideoFeed(jsondata):
+    """ delete a feed and remove it from connected devices
+    """
+    uid = str(json.loads(jsondata).get("uid", ""))
+
+    def remove():
+        feed = video_feeds.remove(uid)
+        if feed is None:
+            raise video_feeds.VideoError("that feed no longer exists")
+        send_cot_to_all(video_feeds.delete_cot(uid))
+        return f"{feed['alias']} deleted"
+    emit_video_status(remove)
+
+
+@socketio.on('resendVideoFeed')
+@socket_auth(session=session)
+def resendVideoFeed(jsondata):
+    """ send a feed to connected devices again
+    """
+    uid = str(json.loads(jsondata).get("uid", ""))
+
+    def resend():
+        feed = video_feeds.get(uid)
+        if feed is None:
+            raise video_feeds.VideoError("that feed no longer exists")
+        send_cot_to_all(video_feeds.announce_cot(feed))
+        return f"{feed['alias']} sent to devices"
+    emit_video_status(resend)
+
+
+@socketio.on('kickVideoStream')
+@socket_auth(session=session)
+def kickVideoStream(jsondata):
+    """ disconnect the publisher of a video server stream
+    """
+    name = str(json.loads(jsondata).get("name", ""))
+
+    def kick():
+        video_feeds.kick_publisher(name)
+        return f"disconnected the publisher of {name}"
+    emit_video_status(kick)
+
+
+@socketio.on('setVideoAutoAdd')
+@socket_auth(session=session)
+def setVideoAutoAdd(jsondata):
+    """ turn automatic feeds for new video server streams on or off
+    """
+    enabled = bool(json.loads(jsondata).get("enabled", True))
+
+    def save():
+        video_feeds.set_auto_add(enabled)
+        return "new streams become feeds automatically" if enabled else "new streams no longer become feeds"
+    emit_video_status(save)
 
 
 def groups_status():
@@ -1237,36 +1349,18 @@ def deleteVideoStream():
 @app.route("/ManageVideoStream/postVideoStream", methods=["POST"])
 @auth.login_required()
 def postVideoStream():
-    """this method contains the logic for the endpoints which saves the contents of a new videostream to
-    the db and sends a CoT to all connected clients containing stream information."""
-    from FreeTAKServer.model.FTSModel.Event import Event
-    from lxml.etree import tostring  # pylint: disable=no-name-in-module; name is in module
-    from .controllers.persistency import dbController
-
+    """Node-RED's VideoChecker posts each live video server stream here every couple of
+    minutes; the stream becomes a feed (unless automatic feeds are off or its feed was
+    deleted) and is sent to connected devices again, so devices that joined since get it"""
     try:
         jsondata = request.get_json(force=True)
-
-        # the following prevents duplicate entries being added to the db
-        url = jsondata["streamAddress"] + ":" + jsondata["streamPort"] + jsondata["streamPath"]
-        video_streams = dbController.query_videostream()
-
-        for video in video_streams:
-            if video.url == url:
-                sqlalchemy_obj = dbController.query_CoT(f'uid="{video.PrimaryKey}"')[0]
-                modelObject = SqlAlchemyObjectController().convert_sqlalchemy_to_modelobject(sqlalchemy_obj,
-                                                                                             Event.VideoStream())
-                xmlString = tostring(XmlSerializer().from_fts_object_to_format(modelObject))
-                modelObject.xmlString = xmlString
-                APIPipe.put(modelObject)
-                return {"message":"entry already exists in db " + str(video.PrimaryKey) + " resending existing entry"}, 201
-
-        simpleCoTObject = SendVideoStreamController(jsondata).getCoTObject()
-        print("putting in queue")
-        APIPipe.put(simpleCoTObject)
-        print(simpleCoTObject.xmlString)
-        print('put in queue')
-        return {"message":simpleCoTObject.modelObject.getuid()}, 200
-
+        feed, created = video_feeds.auto_add_stream(str(jsondata.get("streamPath", "")))
+        if feed is None:
+            return {"message": "automatic video feeds are off for this stream"}, 200
+        send_cot_to_all(video_feeds.announce_cot(feed))
+        return {"message": feed["uid"]}, 200 if created else 201
+    except (video_feeds.VideoError, OSError) as e:
+        return {"message": str(e)}, 400
     except Exception as e:
         logger.error(str(e))
         return {"message":"An error occurred adding video stream."}, 500

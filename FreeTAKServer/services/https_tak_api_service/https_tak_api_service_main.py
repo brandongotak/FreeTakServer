@@ -116,61 +116,56 @@ def alive():
     return 'DataPackage service alive', 200
 
 
+def request_host():
+    """the host name the device used to reach FTS, so feed URLs work from where it is"""
+    from urllib.parse import urlparse
+    return urlparse(request.url_root).hostname
+
+
 @app.route("/Marti/vcm", methods=[const.GET])
 def get_all_video_links():
-    # This is called when the user selects the Download button in the Videos window. It
-    # expects an XML listing of all known feeds, so the user can pick and choose which ones
-    # to store locally
-    try:
-        feeds = dbController.query_videostream(column=["FullXmlString"])
-        app.logger.info(
-            f"Found {len(feeds)} video feeds in {const.DATABASE}")  # pylint: disable=no-member; member does exist
-        if len(feeds) == 0:
-            return ("No video feeds found", 500)
-        all_feeds = ""
-        for feed in feeds:
-            # 'feed' is a tuple with one element, so we only append that
-            all_feeds += feed.FullXmlString.decode("utf-8")
-        return f"<videoConnections>{all_feeds}</videoConnections>"
-    except:
-        app.logger.error(traceback.format_exc())  # pylint: disable=no-member; member does exist
-        return "Error", 500
+    # ATAK's Videos tool calls this for its Download button and lets the user
+    # pick which feeds to keep
+    return video_feeds.vcm_xml(request_host()), 200, {"Content-Type": "application/xml"}
 
 
 @app.route("/Marti/vcm", methods=[const.POST])
 def insert_video_link():
+    # a device sharing feeds with the server
     try:
-        xml_root = ET.fromstring(request.data.decode("utf-8"))
-        for xml_feed in xml_root:
-            protocol = xml_feed.find("protocol").text
-            alias = xml_feed.find("alias").text
-            uid = xml_feed.find("uid").text
-            address = xml_feed.find("address").text
-            port = xml_feed.find("port").text
-            rover_port = xml_feed.find("roverPort").text
-            ignore_klv = xml_feed.find("ignoreEmbeddedKLV").text
-            preferred_mac = xml_feed.find("preferredMacAddress").text
-            path = xml_feed.find("path").text
-            buf = xml_feed.find("buffer").text
-            timeout = xml_feed.find("timeout").text
-            rtsp_reliable = xml_feed.find("rtspReliable").text
-            # Check that no other feeds with the same UID have been received
-            streams = dbController.query_videostream(query=f'uid = "{uid}"')
-            if len(streams) > 0:
-                app.logger.info(
-                    f"Already received feed with UID={uid} (alias = {alias})")  # pylint: disable=no-member; member does exist
-                continue  # Ignore this feed if there are duplicates
-            app.logger.info(
-                f"Inserting video feed into database: {request.data.decode('utf-8')}")  # pylint: disable=no-member; member does exist
-            dbController.create_videostream(FullXmlString=ET.tostring(xml_feed), Protocol=protocol, Alias=alias,
-                                            uid=uid, Address=address, Port=port, RoverPort=rover_port,
-                                            IgnoreEmbeddedKlv=ignore_klv, PreferredMacAddress=preferred_mac, Path=path,
-                                            Buffer=buf, Timeout=timeout, RtspReliable=rtsp_reliable)
-
+        added = video_feeds.add_from_vcm_xml(request.data)
+        app.logger.info(f"{added} video feeds added by a device")
         return "Okay", 200
-    except:
+    except (ET.ParseError, OSError):
         app.logger.error(traceback.format_exc())
-        return "Error", 500
+        return "Error", 400
+
+
+@app.route("/Marti/api/video", methods=[const.GET])
+def get_video_collections():
+    return video_feeds.video_collections(request_host()), 200
+
+
+@app.route("/Marti/api/video", methods=[const.POST])
+def add_video_collections():
+    try:
+        video_feeds.add_from_collections(request.get_json(force=True))
+        return "", 200
+    except (ValueError, AttributeError, OSError):
+        app.logger.error(traceback.format_exc())
+        return "Error", 400
+
+
+@app.route("/Marti/api/video/<uid>", methods=[const.GET])
+def get_video_collection(uid):
+    collection = next((c for c in video_feeds.video_collections(request_host())["videoConnections"]
+                       if c["uuid"] == uid), None)
+    return (collection, 200) if collection else ("", 404)
+
+
+@app.route("/Marti/api/video/<uid>", methods=["DELETE"])
+def delete_video_collection(uid):
+    return ("", 200) if video_feeds.remove(uid) else ("", 404)
 
 
 @app.route('/Marti/api/version/config', methods=[const.GET])
@@ -340,6 +335,7 @@ from FreeTAKServer.core.connection.SSLSocketController import SSLSocketControlle
 from .blueprints import excheck_blueprint, citrap_blueprint, misc_blueprint, mission_blueprint, enterprise_sync_blueprint
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
+from FreeTAKServer.core.util import video_feeds
 
 
 def create_tls_listener(address):
