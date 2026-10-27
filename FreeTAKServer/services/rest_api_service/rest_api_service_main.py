@@ -315,36 +315,41 @@ def groups_status():
             "defined": groups.defined_groups()}
 
 
-@socketio.on('createEnrollQR')
-@socket_auth(session=session)
-def createEnrollQR(jsondata):
-    """ make a quick-connect QR code for a user: an enrollment code (instead of
+def build_enroll_qr(name, app="atak", hours=24, one_device=True):
+    """make a quick-connect QR code for a user: an enrollment code (instead of
     their password) for ATAK's enroll link or iTAK's registration format.
     Needs certificate enrollment with a publicly trusted certificate, since the
-    device must trust the enrollment port before it has any FTS certificate
-    """
-    data = json.loads(jsondata)
-    name = str(data.get("name", ""))
-    app = "itak" if data.get("app") == "itak" else "atak"
+    device must trust the enrollment port before it has any FTS certificate.
+    Raises ValueError with a message for the UI"""
+    app = "itak" if app == "itak" else "atak"
     host = enrollment_setup.status().get("domain")
     if not host:
-        emit('enrollQR', json.dumps({"error": "set up certificate enrollment (Configure page) first"}))
-        return
+        raise ValueError("set up certificate enrollment (Configure page) first")
     if name not in [user["Name"] for user in get_system_users()["SystemUsers"]]:
-        emit('enrollQR', json.dumps({"error": f"unknown user {name!r}"}))
-        return
-    try:
-        record = enroll_codes.create(name, int(data.get("hours", 24)), bool(data.get("oneDevice", True)))
-    except (ValueError, OSError) as e:
-        emit('enrollQR', json.dumps({"error": str(e)}))
-        return
+        raise ValueError(f"unknown user {name!r}")
+    if ui_access.is_disabled(name):
+        raise ValueError(f"{name} is disabled")
+    record = enroll_codes.create(name, int(hours), bool(one_device))
     if app == "itak":
         payload = enroll_codes.itak_registration(host, int(config.SSLCoTServicePort), name, record["code"], record["id"])
     else:
         payload = enroll_codes.atak_link(host, name, record["code"])
-    emit('enrollQR', json.dumps({"username": name, "app": app, "expires": record["expires"],
-                                 "oneDevice": record["one_device"], "id": record["id"],
-                                 "image": enroll_codes.qr_png_data_uri(payload)}))
+    return {"username": name, "app": app, "expires": record["expires"], "oneDevice": record["one_device"],
+            "id": record["id"], "image": enroll_codes.qr_png_data_uri(payload)}
+
+
+@socketio.on('createEnrollQR')
+@socket_auth(session=session)
+def createEnrollQR(jsondata):
+    """ make a quick-connect QR code for a user (admin QR panel)
+    """
+    data = json.loads(jsondata)
+    try:
+        result = build_enroll_qr(str(data.get("name", "")), data.get("app"), data.get("hours", 24), data.get("oneDevice", True))
+    except (ValueError, OSError) as e:
+        emit('enrollQR', json.dumps({"error": str(e)}))
+        return
+    emit('enrollQR', json.dumps(result))
     emit('enrollCodesUpdate', json.dumps(enroll_codes.active()))
 
 
@@ -1358,6 +1363,56 @@ def mapvid():
     return {"message":"success"}, 200
 
 
+def system_user_by_uid(uid):
+    return next((u for u in DatabaseController().query_systemUser() if u.uid == uid), None)
+
+
+@app.route("/SelfService/account", methods=["GET"])
+@auth.login_required
+def self_service_account():
+    """what the user portal shows a signed-in user about their own account"""
+    user = system_user_by_uid(request.args.get("uid", ""))
+    if user is None:
+        return {"message": "unknown user"}, 404
+    return {"name": user.name, "groups": groups.assigned_groups(user.name),
+            "activeGroups": groups.active_groups(user.name), "groupRoutingEnabled": groups.groups_enabled(),
+            "hasPackage": bool(user.certificate_package_name), "deviceType": user.device_type,
+            "enrollmentConfigured": bool(enrollment_setup.status().get("domain"))}, 200
+
+
+@app.route("/SelfService/password", methods=["POST"])
+@auth.login_required
+def self_service_password():
+    """change the signed-in user's password; needs their current password"""
+    data = request.get_json(silent=True) or {}
+    user = system_user_by_uid(str(data.get("uid", "")))
+    if user is None:
+        return {"message": "unknown user"}, 404
+    if ui_access.authenticate(user.name, str(data.get("current", ""))) != user.uid:
+        return {"message": "the current password is wrong"}, 403
+    new_password = str(data.get("new", ""))
+    # the password column holds at most 30 characters
+    if not 8 <= len(new_password) <= 30:
+        return {"message": "the new password must be 8 to 30 characters"}, 400
+    from .controllers.persistency import dbController
+    dbController.update_systemUser(query=f'uid = "{user.uid}"', column_value={"password": new_password})
+    return {"message": "password changed"}, 200
+
+
+@app.route("/SelfService/enrollQR", methods=["POST"])
+@auth.login_required
+def self_service_enroll_qr():
+    """a one-device, 24 hour quick-connect QR code for the signed-in user's own device"""
+    data = request.get_json(silent=True) or {}
+    user = system_user_by_uid(str(data.get("uid", "")))
+    if user is None:
+        return {"message": "unknown user"}, 404
+    try:
+        return build_enroll_qr(user.name, data.get("app"), 24, True), 200
+    except (ValueError, OSError) as e:
+        return {"message": str(e)}, 400
+
+
 @app.route("/UserPackage", methods=["GET"])
 @auth.login_required
 def rebuild_user_package():
@@ -1411,9 +1466,10 @@ def rebuild_user_package():
 @app.route("/AuthenticateUser", methods=["GET"])
 @auth.login_required
 def authenticate_user():
-    """check web UI sign-in credentials: 200 with the user's uid for admins,
-    403 for valid device-only accounts, 401 otherwise. The query used to be
-    built by pasting the username into the SQL"""
+    """check web UI sign-in credentials: 200 with the user's uid and whether
+    they're an admin (others only get the user portal), 403 for disabled
+    accounts, 401 otherwise. The query used to be built by pasting the
+    username into the SQL"""
     try:
         username = request.args.get("username", "")
         uid = ui_access.authenticate(username, request.args.get("password", ""))
@@ -1421,9 +1477,8 @@ def authenticate_user():
             return {"message": "wrong user or password"}, 401
         if ui_access.is_disabled(username):
             return {"message": "this account is disabled"}, 403
-        if not ui_access.is_admin(username):
-            return {"message": "this account has no web UI access"}, 403
-        return {"uid": uid}, 200
+        # non-admins get the user portal only
+        return {"uid": uid, "admin": ui_access.is_admin(username)}, 200
     except Exception as e:
         logger.error(str(e))
         return {"message": "An error occurred authenticating user."}, 500
