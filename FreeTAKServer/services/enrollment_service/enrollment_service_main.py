@@ -105,14 +105,21 @@ def sign_client():
     logger.info(f"issued certificate for {username!r} (clientUid {request.args.get('clientUid', '')!r})")
 
     accept = request.headers.get("Accept", "").lower()
-    if not accept or "*/*" in accept or "application/json" in accept:
-        body = {"signedCert": to_base64_der(cert), "ca0": to_base64_der(ca_cert)}
-        return Response(json.dumps(body), 200, mimetype="application/json")
-    if "application/xml" in accept:
+    signed, ca = to_base64_der(cert), to_base64_der(ca_cert)
+    # iOS clients (iTAK, and TROP, which sends no User-Agent) ask for text/plain
+    # and quietly drop the reply unless it carries the CA as both ca0 and ca1
+    ios_client = "itak" in request.headers.get("User-Agent", "").lower() or not request.headers.get("User-Agent")
+    wants_text = "text/plain" in accept and "application/json" not in accept
+    if ios_client or wants_text:
+        body = json.dumps({"signedCert": signed, "ca0": ca, "ca1": ca})
+        return Response(body, 200, mimetype="text/plain" if "text/plain" in accept else "application/json")
+    if "application/xml" in accept and "application/json" not in accept:
         body = (f'<?xml version="1.0" encoding="UTF-8"?><enrollment>'
-                f'<signedCert>{to_base64_der(cert)}</signedCert><ca>{to_base64_der(ca_cert)}</ca></enrollment>')
+                f'<signedCert>{signed}</signedCert><ca>{ca}</ca></enrollment>')
         return Response(body, 200, mimetype="application/xml")
-    return Response("unsupported Accept header", 400)
+    # ATAK and anything else: TAK's JSON reply (which used to be a 400 for any
+    # Accept other than JSON or XML)
+    return Response(json.dumps({"signedCert": signed, "ca0": ca}), 200, mimetype="application/json")
 
 
 @app.route("/Marti/api/tls/profile/enrollment", methods=["GET"])
