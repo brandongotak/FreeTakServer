@@ -30,7 +30,7 @@ from digitalpy.core.parsing.formatter import Formatter
 from FreeTAKServer.core.configuration.CreateLoggerController import CreateLoggerController
 
 from FreeTAKServer.core.util import certificate_generation
-from FreeTAKServer.core.util import enrollment_setup
+from FreeTAKServer.core.util import enrollment_setup, server_cert_names
 from FreeTAKServer.core.util import connection_message
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
@@ -281,6 +281,8 @@ def setupEnrollment(jsondata):
         try:
             ok, message = tpool.execute(enrollment_setup.setup, str(data.get("domain", "")),
                                         str(data.get("email", "")))
+            if ok and server_cert_names.ensure():
+                message += "; the domain was added to the server certificate, restart FTS to use it"
         except Exception as e:
             logger.error(f"enrollment setup failed: {e}")
             ok, message = False, f"enrollment setup failed: {e}"

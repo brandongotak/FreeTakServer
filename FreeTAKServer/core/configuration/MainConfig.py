@@ -141,6 +141,8 @@ class MainConfig:
         # every client certificate stops working when the CA expires
         "CACertValidityDays": {"default": 3650, "type": int},
         "ServerCertValidityDays": {"default": 3650, "type": int},
+        # extra comma separated names for the server certificate, see server_cert_names
+        "ServerCertNames": {"default": "", "type": str},
         # days of REST API call records kept (see FreeTAKServer.core.util.retention)
         "RetentionDays": {"default": 30, "type": int},
         # MediaMTX's control API, and the RTSP port devices play its streams on
@@ -257,6 +259,7 @@ class MainConfig:
         "FTS_ENROLLMENT_VALIDITY_DAYS": "EnrollmentCertValidityDays",
         "FTS_CA_VALIDITY_DAYS": "CACertValidityDays",
         "FTS_SERVER_CERT_VALIDITY_DAYS": "ServerCertValidityDays",
+        "FTS_SERVER_CERT_NAMES": "ServerCertNames",
         "FTS_RETENTION_DAYS": "RetentionDays",
         "FTS_VIDEO_SERVER_API": "VideoServerAPI",
         "FTS_VIDEO_RTSP_PORT": "VideoServerRTSPPort",
@@ -378,6 +381,7 @@ class MainConfig:
             "FTS_ENROLLMENT_VALIDITY_DAYS": "EnrollmentCertValidityDays",
             "FTS_CA_VALIDITY_DAYS": "CACertValidityDays",
             "FTS_SERVER_CERT_VALIDITY_DAYS": "ServerCertValidityDays",
+            "FTS_SERVER_CERT_NAMES": "ServerCertNames",
         },
     }
 

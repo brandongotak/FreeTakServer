@@ -29,6 +29,7 @@ from multiprocessing import Queue
 
 from FreeTAKServer.core.util.AddDataToCoTList import AddDataToCoTList
 from FreeTAKServer.core.util.certificate_generation import AtakOfTheCerts
+from FreeTAKServer.core.util import server_cert_names
 from FreeTAKServer.core.configuration.LoggingConstants import LoggingConstants
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
 from FreeTAKServer.core.configuration.OrchestratorConstants import (
@@ -1763,6 +1764,12 @@ if __name__ == "__main__":
         aotc.generate_ca(expiry_time_secs=config.CACertValidityDays * 86400)
         aotc.bake(common_name="server", cert="server", expiry_time_secs=config.ServerCertValidityDays * 86400)
         aotc.bake(common_name="Client", cert="user", expiry_time_secs=31536000)
+        try:
+            added = server_cert_names.ensure()
+            if added:
+                print(f"added to the server certificate: {', '.join(added)}")
+        except Exception as e:
+            print(f"could not update the names in the server certificate: {e}")
         import os
 
         if args.d:
