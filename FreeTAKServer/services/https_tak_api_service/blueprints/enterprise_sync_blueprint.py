@@ -8,6 +8,7 @@ from FreeTAKServer.core.services.DataPackageServer import USINGSSL
 from FreeTAKServer.services.https_tak_api_service.controllers.https_tak_api_communication_controller import HTTPSTakApiCommunicationController
 from werkzeug.utils import secure_filename
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
+from FreeTAKServer.core.util import sync_search
 from io import BytesIO
 import os
 from pathlib import Path, PurePath
@@ -57,26 +58,7 @@ def retrieveData():
     keyword = request.args.get('keyword', "missionpackage")
     tool = request.args.get('tool', "public")
     packages: List[EnterpriseSyncDataObject] = HTTPSTakApiCommunicationController().make_request("GetMultipleEnterpriseSyncMetaData", "", {"tool": tool, "keyword": keyword}, None, True).get_value("objectmetadata") # type: ignore
-    public_packages = [package for package in packages if package.private == 0]
-    package_dict = {
-                "resultCount": len(public_packages),
-                "results": []
-            }
-    for pack in public_packages:
-        package_dict["results"].append({
-            "UID": str(pack.PrimaryKey),
-            "Name": pack.keywords[0].keyword,
-            "Hash": pack.PrimaryKey,
-            "PrimaryKey": str(pack.id),
-            "SubmissionDateTime": str(pack.start_time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-            "SubmissionUser": pack.submitter,
-            "CreatorUid": pack.creator_uid,
-            "Keywords": [keyword.keyword for keyword in pack.keywords],
-            "MIMEType": pack.mime_type,
-            "Size": pack.length
-        })
-    print(str(package_dict))
-    return json.dumps(package_dict)
+    return sync_search.response(packages)
 
 @page.route('/Marti/sync/content', methods=["HEAD"])
 @page.route('/Marti/api/sync/content', methods=["HEAD"])
