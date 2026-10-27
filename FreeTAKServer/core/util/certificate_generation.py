@@ -128,8 +128,15 @@ def send_data_package(server: str, dp_name: str = "user.zip") -> bool:
             print("Something went wrong uploading DataPackage!")
             return False
 
+def default_server_address() -> str:
+    """the address put in connection packages unless a download asks for another"""
+    if config.UserConnectionIP == "0.0.0.0":
+        return socket.gethostbyname(socket.gethostname())
+    return config.UserConnectionIP
+
+
 def generate_standard_zip(server_address: str = None, server_filename: str = "", user_filename: str = "Client.p12",
-                 cert_password: str = config.password, ssl_port: str = "8089") -> None:
+                 cert_password: str = config.password, ssl_port: str = "8089", destination=None) -> None:
     """
     A Function to generate a Client connection Data Package (DP) from a server and user p12 file in the current
     working directory.
@@ -138,6 +145,7 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
     :param user_filename: The filename of the server p12 file default is user.p12
     :param cert_password: The password for the certificate files
     :param ssl_port: The port used for SSL CoT, defaults to 8089
+    :param destination: a path or file object for the zip; defaults to the user's file in ClientPackages
     """
     if server_filename == "":
         server_filename = config.UserConnectionIP.replace(".", "-")+"_"+config.version.replace(".","-")+"_"+config.nodeID+".p12"
@@ -177,11 +185,10 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
 
     username = user_filename[:-4]
     random_id = uuid.uuid4()
-    if config.UserConnectionIP == "0.0.0.0":
-        hostname = socket.gethostname()
-        server_address = socket.gethostbyname(hostname)
-    else:
-        server_address = config.UserConnectionIP
+    if not server_address or server_address == "0.0.0.0":
+        server_address = default_server_address()
+    if destination is None:
+        destination = pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip"))
     pref = pref_file_template.render(server=server_address, server_filename=server_filename,
                                      user_filename=user_filename, cert_password=cert_password,
                                      port=str(config.SSLCoTServicePort),
@@ -191,10 +198,7 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
                                         user_filename=user_filename)
     # write entries straight from their sources; staging copies in the working
     # directory failed with "same file" whenever FTS ran from the certs folder
-    with zipfile.ZipFile(
-        pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip")),
-        mode='w',
-        compression=zipfile.ZIP_DEFLATED) as zipf:
+    with zipfile.ZipFile(destination, mode='w', compression=zipfile.ZIP_DEFLATED) as zipf:
 
         zipf.writestr('fts.pref', pref)
         zipf.writestr('manifest.xml', man)
@@ -202,7 +206,7 @@ def generate_standard_zip(server_address: str = None, server_filename: str = "",
         zipf.write(config.p12Dir, arcname=server_filename)
 
 def generate_wintak_zip(server_address: str = None, server_filename: str = "", user_filename: str = "Client.p12",
-                 cert_password: str = config.password, ssl_port: str = "8089") -> None:
+                 cert_password: str = config.password, ssl_port: str = "8089", destination=None) -> None:
     """
     A Function to generate a Client connection Data Package (DP) from a server and user p12 file in the current
     working directory.
@@ -211,6 +215,7 @@ def generate_wintak_zip(server_address: str = None, server_filename: str = "", u
     :param user_filename: The filename of the server p12 file default is user.p12
     :param cert_password: The password for the certificate files
     :param ssl_port: The port used for SSL CoT, defaults to 8089
+    :param destination: a path or file object for the zip; defaults to the user's file in ClientPackages
     """
     if server_filename == "":
         server_filename = config.UserConnectionIP.replace(".", "-")+"_"+config.version.replace(".","-")+"_"+config.nodeID+".p12"
@@ -262,11 +267,10 @@ def generate_wintak_zip(server_address: str = None, server_filename: str = "", u
     new_uid = uuid.uuid4()
     folder = "5c2bfcae3d98c9f4d262172df99ebac5"
     parentfolder = "80b828699e074a239066d454a76284eb"
-    if config.UserConnectionIP == "0.0.0.0":
-        hostname = socket.gethostname()
-        server_address = socket.gethostbyname(hostname)
-    else:
-        server_address = config.UserConnectionIP
+    if not server_address or server_address == "0.0.0.0":
+        server_address = default_server_address()
+    if destination is None:
+        destination = pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip"))
     pref = pref_file_template.render(server=server_address, server_filename=server_filename,
                                      user_filename=user_filename, cert_password=cert_password,
                                      port=str(config.SSLCoTServicePort),
@@ -285,7 +289,7 @@ def generate_wintak_zip(server_address: str = None, server_filename: str = "", u
         zipf.write(pathlib.Path(config.certsPath, user_filename), arcname=f"{folder}/{user_filename}")
         zipf.writestr("MANIFEST/manifest.xml", man)
     # Create outer DP...because WinTAK
-    with zipfile.ZipFile(str(pathlib.PurePath(pathlib.Path(config.ClientPackages), pathlib.Path(f"{username}.zip"))), 'w', zipfile.ZIP_DEFLATED) as zipp:
+    with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as zipp:
         zipp.writestr(f"{parentfolder}/{username}.zip", inner.getvalue())
         zipp.writestr("MANIFEST/manifest.xml", man_parent)
 

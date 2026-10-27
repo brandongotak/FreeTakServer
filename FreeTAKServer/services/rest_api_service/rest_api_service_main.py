@@ -11,6 +11,7 @@ from defusedxml import ElementTree as etree
 import os
 import shutil
 import json
+import re
 from flask_cors import CORS
 import qrcode
 import io
@@ -1507,13 +1508,28 @@ def self_service_enroll_qr():
         return {"message": str(e)}, 400
 
 
+HOST_NAME = re.compile(r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+
+def package_host(host):
+    """a host name or IPv4 address to put in a connection package, or None for the
+    configured address; loopback means the UI was reached through a tunnel"""
+    host = str(host or "").strip().lower()
+    if not HOST_NAME.match(host) or host == "localhost" or host.startswith("127."):
+        return None
+    return host
+
+
 @app.route("/UserPackage", methods=["GET"])
 @auth.login_required
 def rebuild_user_package():
     """rebuild a user's connection package (fts.pref, their certificate and the
     truststore) from the current server settings, e.g. after it was deleted;
     re-lists it as a data package if it's gone and returns the zip. A new
-    certificate is only issued when the user's .p12 is missing"""
+    certificate is only issued when the user's .p12 is missing.
+
+    host: the address the admin or user is viewing the UI at; the returned zip
+    connects to it (the stored, listed package keeps the configured address)"""
     import hashlib
     from pathlib import Path, PurePath
     try:
@@ -1536,10 +1552,9 @@ def rebuild_user_package():
                     stale.rename(str(stale) + ".old")
             certificate_generation.AtakOfTheCerts().bake(common_name=cert_name)
 
-        if (user.device_type or "").lower() == "wintak":
-            certificate_generation.generate_wintak_zip(user_filename=cert_name + ".p12", server_address=config.UserConnectionIP)
-        else:
-            certificate_generation.generate_standard_zip(user_filename=cert_name + ".p12", server_address=config.UserConnectionIP)
+        build_zip = (certificate_generation.generate_wintak_zip if (user.device_type or "").lower() == "wintak"
+                     else certificate_generation.generate_standard_zip)
+        build_zip(user_filename=cert_name + ".p12")
         data = Path(PurePath(config.ClientPackages, package_name)).read_bytes()
 
         listed = RestAPICommunicationController().make_request(
@@ -1551,6 +1566,11 @@ def rebuild_user_package():
                 "objkeywords": [package_name, user.uid, "missionpackage"], "mime_type": "application/zip",
                 "tool": "public", "synctype": "datapackage", "objectuid": file_hash, "length": len(data),
                 "privacy": 1}, None, True)
+        host = package_host(request.args.get("host", ""))
+        if host and host != certificate_generation.default_server_address():
+            download = io.BytesIO()
+            build_zip(user_filename=cert_name + ".p12", server_address=host, destination=download)
+            data = download.getvalue()
         return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True, download_name=package_name)
     except Exception as e:
         logger.error(f"rebuilding the user package failed: {e}")
