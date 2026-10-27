@@ -361,6 +361,15 @@ class ClientCertHttpProtocol(wsgi.HttpProtocol):
         return environ
 
 
+@app.after_request
+def log_failed_request(response):
+    """log TAK API calls that fail or that FTS doesn't serve, with the client
+    that made them, so what a client (TAKX, a new ATAK) needs shows up"""
+    if response.status_code >= 400:
+        logger.warning(f"TAK API {request.method} {request.full_path.rstrip('?')} -> {response.status_code} "
+                       f"from {request.remote_addr} User-Agent {request.headers.get('User-Agent', '')!r}")
+    return response
+
 @app.before_request
 def refuse_disabled_users():
     """certificates of disabled users get no access to the TAK API"""

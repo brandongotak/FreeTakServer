@@ -105,6 +105,17 @@ def init_config():
     if not os.path.exists(config.ExCheckFilePath):
         os.mkdir(config.ExCheckFilePath)
 
+
+@app.after_request
+def log_failed_request(response):
+    """log TAK API calls that fail or that FTS doesn't serve, with the client
+    that made them, so what a client (TAKX, a new ATAK) needs shows up"""
+    if response.status_code >= 400:
+        logger.warning(f"TAK API {request.method} {request.full_path.rstrip('?')} -> {response.status_code} "
+                       f"from {request.remote_addr} User-Agent {request.headers.get('User-Agent', '')!r}")
+    return response
+
+
 @app.route('/')
 def hello():
     # nothing lives at the root; this used to answer "hello world"
