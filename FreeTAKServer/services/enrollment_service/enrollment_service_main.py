@@ -27,7 +27,7 @@ from FreeTAKServer.core.util import enroll_codes
 from FreeTAKServer.core.util import ui_access
 
 from .certificate_signing import (ORGANIZATION, ORGANIZATIONAL_UNIT, EnrollmentError, load_ca,
-                                  parse_csr, sign_client_csr, to_base64_der)
+                                  parse_csr, sign_client_csr, to_base64_der, to_pem_body)
 
 config = MainConfig.instance()
 
@@ -116,7 +116,9 @@ def sign_client():
     ios_client = not user_agent or any(marker in user_agent for marker in ("itak", "cfnetwork", "darwin"))
     wants_text = "text/plain" in accept and "application/json" not in accept
     if ios_client or wants_text:
-        body = json.dumps({"signedCert": signed, "ca0": ca, "ca1": ca})
+        # iOS clients get PEM-style 64-character lines, as OpenTAKServer sends them
+        signed_pem, ca_pem = to_pem_body(cert), to_pem_body(ca_cert)
+        body = json.dumps({"signedCert": signed_pem, "ca0": ca_pem, "ca1": ca_pem})
         return Response(body, 200, mimetype="text/plain" if "text/plain" in accept else "application/json")
     if "application/xml" in accept and "application/json" not in accept:
         body = (f'<?xml version="1.0" encoding="UTF-8"?><enrollment>'

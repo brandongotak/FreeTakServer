@@ -99,3 +99,10 @@ def sign_client_csr(csr: x509.CertificateSigningRequest, username: str, ca_cert:
 def to_base64_der(cert: x509.Certificate) -> str:
     """encode a certificate the way TAK enrollment responses carry it: base64 DER, no PEM headers"""
     return base64.b64encode(cert.public_bytes(serialization.Encoding.DER)).decode("ascii")
+
+
+def to_pem_body(cert: x509.Certificate) -> str:
+    """the PEM text without its BEGIN/END lines: base64 in 64-character lines.
+    TAK Aware wraps this in PEM markers and its parser insists on the line length"""
+    pem = cert.public_bytes(serialization.Encoding.PEM).decode("ascii")
+    return "\n".join(line for line in pem.splitlines() if line and not line.startswith("-----"))
