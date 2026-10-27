@@ -3,6 +3,7 @@ from flask import Blueprint, request, make_response
 from FreeTAKServer.core.configuration.MainConfig import MainConfig
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import device_profile
+from FreeTAKServer.core.util import client_endpoints
 
 config = MainConfig.instance()
 page = Blueprint('misc', __name__)
@@ -29,17 +30,5 @@ def connection_profile():
 
 @page.route('/Marti/api/clientEndPoints', methods=["GET"])
 def clientEndPoint():
-    return {
-        "version": "3",
-        "type": "com.bbn.marti.remote.ClientEndpoint",
-        "data": [
-            {
-                "callsign": "DOWN",
-                "uid": "ANDROID-199eeda473669973",
-                "username": "ghost",
-                "lastEventTime": "2023-06-16T15:20:55.871Z",
-                "lastStatus": "Connected"
-            }
-        ],
-        "nodeId": config.nodeID
-    }
+    """the devices connected now (this used to be a hard-coded placeholder)"""
+    return client_endpoints.response()
