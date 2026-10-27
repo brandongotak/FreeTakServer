@@ -12,6 +12,10 @@ class CreateLoggerController:
     def __init__(self, loggername, logging_constants=loggingConstants):
         self.logger = logging.getLogger(loggername)
         self.logger.propagate = True
+        if self.logger.handlers:
+            # several modules in one process ask for the same logger; adding
+            # the handlers again would write every line once per module
+            return
         log_format = logging.Formatter(logging_constants.LOGFORMAT)
 
         if config.LogLevel.lower() == "info":

@@ -30,7 +30,9 @@ from FreeTAKServer.core.util.time_utils import get_dtg
 page = Blueprint("enterprise_sync", __name__)
 config = MainConfig.instance()
 
+# TAK Server answers the sync calls with and without /api; TAKX uses /Marti/api/sync
 @page.route('/Marti/sync/upload', methods=["POST"])
+@page.route('/Marti/api/sync/upload', methods=["POST"])
 def enterprise_sync_upload_alt():
     """a new endpoint used by the enterprise sync tool to upload files"""
     filename = request.args.get("filename") or request.args.get("name")
@@ -50,6 +52,7 @@ def enterprise_sync_upload_alt():
         "Hash": metadata.hash,
     }
 @page.route('/Marti/sync/search', methods=["GET"])
+@page.route('/Marti/api/sync/search', methods=["GET"])
 def retrieveData():
     keyword = request.args.get('keyword', "missionpackage")
     tool = request.args.get('tool', "public")
@@ -76,6 +79,7 @@ def retrieveData():
     return json.dumps(package_dict)
 
 @page.route('/Marti/sync/content', methods=["HEAD"])
+@page.route('/Marti/api/sync/content', methods=["HEAD"])
 def enterprise_sync_head():
     contents = HTTPSTakApiCommunicationController().make_request("GetEnterpriseSyncData", "", {"objecthash": request.args.get('hash')}, None, True).get_value("objectdata") # type: ignore
     if contents == None:
@@ -83,6 +87,7 @@ def enterprise_sync_head():
     else:
         return '', 200
 @page.route('/Marti/sync/content', methods=["PUT", "POST"])
+@page.route('/Marti/api/sync/content', methods=["PUT", "POST"])
 def enterprise_sync_upload():
     filename = request.args.get("filename")
     creatorUid = request.args.get("creatorUid")
@@ -90,6 +95,7 @@ def enterprise_sync_upload():
     return HTTPSTakApiCommunicationController().make_request("SaveEnterpriseSyncData", "", {"objecthash": request.args.get('hash'), "objectdata": request.files.getlist('assetfile')[0], "file_name": filename, "creator_uid": creatorUid, "objkeywords": [filename, creatorUid, "missionpackage"], "objstarttime": "", "tool": tool}, None, True).get_value("objectid"), 200 # type: ignore
 
 @page.route('/Marti/sync/content', methods=["GET"])
+@page.route('/Marti/api/sync/content', methods=["GET"])
 def specificPackage():
     from defusedxml import ElementTree as etree
     from os import listdir
@@ -104,6 +110,7 @@ def specificPackage():
         return '', 500
     
 @page.route('/Marti/sync/missionupload', methods=["PUT", "POST"])
+@page.route('/Marti/api/sync/missionupload', methods=["PUT", "POST"])
 def upload():
     file_hash = request.args.get('hash') # type: ignore
     letters = string.ascii_letters
@@ -116,6 +123,7 @@ def upload():
     return "https://" + config.DataPackageServiceDefaultIP + ':' + str(config.HTTPSTakAPIPort) + "/Marti/api/sync/metadata/" + file_hash + "/tool"
 
 @page.route('/Marti/sync/missionquery', methods=["GET"])
+@page.route('/Marti/api/sync/missionquery', methods=["GET"])
 def get_mission():
     hash = request.args.get("hash") # type: ignore
     data: bytes = HTTPSTakApiCommunicationController().make_request("GetEnterpriseSyncData", "enterpriseSync", {"objecthash": hash, "use_bytes": True}).get_value("objectdata") # type: ignore
