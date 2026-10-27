@@ -109,6 +109,11 @@ def sign_client():
     logger.info(f"signClient from {username!r}: User-Agent {request.headers.get('User-Agent', '')!r}, "
                 f"Accept {request.headers.get('Accept', '')!r}, version {request.args.get('version', '')!r}")
     signed, ca = to_base64_der(cert), to_base64_der(ca_cert)
+    # an explicit XML request wins: ATAK sends Accept: application/xml and no User-Agent
+    if "application/xml" in accept and "application/json" not in accept:
+        body = (f'<?xml version="1.0" encoding="UTF-8"?><enrollment>'
+                f'<signedCert>{signed}</signedCert><ca>{ca}</ca></enrollment>')
+        return Response(body, 200, mimetype="application/xml")
     # iOS clients (iTAK, TAK Aware, and TROP, which sends no User-Agent) quietly
     # drop the reply unless it carries the CA as both ca0 and ca1; recognise them
     # by Apple's networking stack rather than by app name
@@ -120,10 +125,6 @@ def sign_client():
         signed_pem, ca_pem = to_pem_body(cert), to_pem_body(ca_cert)
         body = json.dumps({"signedCert": signed_pem, "ca0": ca_pem, "ca1": ca_pem})
         return Response(body, 200, mimetype="text/plain" if "text/plain" in accept else "application/json")
-    if "application/xml" in accept and "application/json" not in accept:
-        body = (f'<?xml version="1.0" encoding="UTF-8"?><enrollment>'
-                f'<signedCert>{signed}</signedCert><ca>{ca}</ca></enrollment>')
-        return Response(body, 200, mimetype="application/xml")
     # ATAK and anything else: TAK's JSON reply (which used to be a 400 for any
     # Accept other than JSON or XML)
     return Response(json.dumps({"signedCert": signed, "ca0": ca}), 200, mimetype="application/json")
