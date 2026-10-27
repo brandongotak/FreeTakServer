@@ -1358,6 +1358,56 @@ def mapvid():
     return {"message":"success"}, 200
 
 
+@app.route("/UserPackage", methods=["GET"])
+@auth.login_required
+def rebuild_user_package():
+    """rebuild a user's connection package (fts.pref, their certificate and the
+    truststore) from the current server settings, e.g. after it was deleted;
+    re-lists it as a data package if it's gone and returns the zip. A new
+    certificate is only issued when the user's .p12 is missing"""
+    import hashlib
+    from pathlib import Path, PurePath
+    try:
+        uid = request.args.get("uid", "")
+        user = next((u for u in DatabaseController().query_systemUser() if u.uid == uid), None)
+        if user is None:
+            return {"message": "unknown user"}, 404
+        package_name = user.certificate_package_name or ""
+        if not package_name.endswith(".zip"):
+            return {"message": "this user was created without certificates"}, 400
+        cert_name = package_name[:-len(".zip")]
+
+        p12_path = Path(config.certsPath, cert_name + ".p12")
+        if not p12_path.exists():
+            # a key/pem without the p12 makes bake() skip the certificate, so
+            # set them aside and issue a new one (old ones stay valid: same CA)
+            for suffix in (".key", ".pem"):
+                stale = Path(config.certsPath, cert_name + suffix)
+                if stale.exists():
+                    stale.rename(str(stale) + ".old")
+            certificate_generation.AtakOfTheCerts().bake(common_name=cert_name)
+
+        if (user.device_type or "").lower() == "wintak":
+            certificate_generation.generate_wintak_zip(user_filename=cert_name + ".p12", server_address=config.UserConnectionIP)
+        else:
+            certificate_generation.generate_standard_zip(user_filename=cert_name + ".p12", server_address=config.UserConnectionIP)
+        data = Path(PurePath(config.ClientPackages, package_name)).read_bytes()
+
+        listed = RestAPICommunicationController().make_request(
+            "GetEnterpriseSyncMetaData", "enterpriseSync", {"file_name": package_name}, None, True).get_value("objectmetadata")
+        if listed is None:
+            file_hash = hashlib.sha256(data).hexdigest()
+            RestAPICommunicationController().make_request("SaveEnterpriseSyncData", "", {
+                "file_name": package_name, "objecthash": file_hash, "objectdata": data,
+                "objkeywords": [package_name, user.uid, "missionpackage"], "mime_type": "application/zip",
+                "tool": "public", "synctype": "datapackage", "objectuid": file_hash, "length": len(data),
+                "privacy": 1}, None, True)
+        return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True, download_name=package_name)
+    except Exception as e:
+        logger.error(f"rebuilding the user package failed: {e}")
+        return {"message": "rebuilding the user package failed"}, 500
+
+
 @app.route("/AuthenticateUser", methods=["GET"])
 @auth.login_required
 def authenticate_user():
