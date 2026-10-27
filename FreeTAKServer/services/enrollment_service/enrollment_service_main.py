@@ -105,6 +105,9 @@ def sign_client():
     logger.info(f"issued certificate for {username!r} (clientUid {request.args.get('clientUid', '')!r})")
 
     accept = request.headers.get("Accept", "").lower()
+    # clients differ in the reply format they accept; log what each one asks for
+    logger.info(f"signClient from {username!r}: User-Agent {request.headers.get('User-Agent', '')!r}, "
+                f"Accept {request.headers.get('Accept', '')!r}, version {request.args.get('version', '')!r}")
     signed, ca = to_base64_der(cert), to_base64_der(ca_cert)
     # iOS clients (iTAK, and TROP, which sends no User-Agent) ask for text/plain
     # and quietly drop the reply unless it carries the CA as both ca0 and ca1
