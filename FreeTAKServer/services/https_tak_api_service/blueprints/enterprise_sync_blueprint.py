@@ -52,13 +52,19 @@ def enterprise_sync_upload_alt():
         "PrimaryKey": metadata.PrimaryKey,
         "Hash": metadata.hash,
     }
-@page.route('/Marti/sync/search', methods=["GET"])
-@page.route('/Marti/api/sync/search', methods=["GET"])
-def retrieveData():
+def search_packages() -> List['EnterpriseSyncDataObject']:
     keyword = request.args.get('keyword', "missionpackage")
     tool = request.args.get('tool', "public")
-    packages: List[EnterpriseSyncDataObject] = HTTPSTakApiCommunicationController().make_request("GetMultipleEnterpriseSyncMetaData", "", {"tool": tool, "keyword": keyword}, None, True).get_value("objectmetadata") # type: ignore
-    return sync_search.response(packages)
+    return HTTPSTakApiCommunicationController().make_request("GetMultipleEnterpriseSyncMetaData", "", {"tool": tool, "keyword": keyword}, None, True).get_value("objectmetadata") # type: ignore
+
+@page.route('/Marti/sync/search', methods=["GET"])
+def retrieveData():
+    return sync_search.response(search_packages())
+
+@page.route('/Marti/api/sync/search', methods=["GET"])
+def search_resources():
+    """the newer form of the search, answered with a list of Resource objects (TAKX)"""
+    return sync_search.resources_response(search_packages())
 
 @page.route('/Marti/sync/content', methods=["HEAD"])
 @page.route('/Marti/api/sync/content', methods=["HEAD"])

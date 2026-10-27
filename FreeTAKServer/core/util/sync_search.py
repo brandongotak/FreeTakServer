@@ -1,17 +1,23 @@
-"""the reply to /Marti/sync/search, shaped like TAK Server's
+"""the replies to TAK Server's two sync search calls
 
-ATAK reads FTS's old reply, but stricter clients (TAKX's Java client) expect
-TAK Server's JSON: an application/json body, Hash as the SHA-256 the content
-is fetched by, and the Tool and Expiration fields."""
+/Marti/sync/search answers {"resultCount", "results"} with capitalised
+fields (what ATAK reads); /Marti/api/sync/search answers a JSON array of
+mission API Resource objects (what TAKX's Java client reads). In both, the
+hash is the SHA-256 that content is downloaded by."""
 import json
 from typing import List
 
 from flask import Response
 
 
+def timestamp(moment) -> str:
+    """UTC time with milliseconds, as TAK Server writes it"""
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
+
+
 def result(package) -> dict:
     keywords = [keyword.keyword for keyword in package.keywords]
-    submitted = package.start_time.strftime("%Y-%m-%dT%H:%M:%S.") + f"{package.start_time.microsecond // 1000:03d}Z"
+    submitted = timestamp(package.start_time)
     return {
         "UID": str(package.PrimaryKey),
         "Name": package.file_name or (keywords[0] if keywords else str(package.PrimaryKey)),
@@ -29,6 +35,31 @@ def result(package) -> dict:
 
 
 def response(packages: List) -> Response:
-    """the public packages, as TAK Server lists them"""
+    """the public packages as /Marti/sync/search lists them"""
     results = [result(package) for package in packages or [] if package.private == 0]
     return Response(json.dumps({"resultCount": len(results), "results": results}), mimetype="application/json")
+
+
+def resource(package) -> dict:
+    keywords = [keyword.keyword for keyword in package.keywords]
+    name = package.file_name or (keywords[0] if keywords else str(package.PrimaryKey))
+    return {
+        "uid": str(package.PrimaryKey),
+        "hash": package.hash or str(package.PrimaryKey),
+        "name": name,
+        "filename": name,
+        "keywords": keywords,
+        "mimeType": package.mime_type or "application/x-zip-compressed",
+        "size": package.length or 0,
+        "submissionTime": timestamp(package.start_time),
+        "submitter": package.submitter or "anonymous",
+        "creatorUid": package.creator_uid or "",
+        "tool": package.tool or "public",
+        "expiration": package.expiration if package.expiration is not None else -1,
+    }
+
+
+def resources_response(packages: List) -> Response:
+    """the public packages as /Marti/api/sync/search lists them"""
+    results = [resource(package) for package in packages or [] if package.private == 0]
+    return Response(json.dumps(results), mimetype="application/json")
