@@ -1,13 +1,18 @@
 """the replies to TAK Server's two sync search calls
 
 /Marti/sync/search answers {"resultCount", "results"} with capitalised
-fields (what ATAK reads); /Marti/api/sync/search answers a JSON array of
-mission API Resource objects (what TAKX's Java client reads). In both, the
+fields (what ATAK reads); /Marti/api/sync/search answers TAK Server's API
+envelope with the mission API Resource objects as its data (what TAKX's
+Java client reads). In both, the
 hash is the SHA-256 that content is downloaded by."""
 import json
 from typing import List
 
 from flask import Response
+
+from FreeTAKServer.core.configuration.MainConfig import MainConfig
+
+config = MainConfig.instance()
 
 
 def timestamp(moment) -> str:
@@ -62,4 +67,6 @@ def resource(package) -> dict:
 def resources_response(packages: List) -> Response:
     """the public packages as /Marti/api/sync/search lists them"""
     results = [resource(package) for package in packages or [] if package.private == 0]
-    return Response(json.dumps(results), mimetype="application/json")
+    # TAK Server: new ApiResponse<>(API_VERSION, Resource.class.getSimpleName(), results)
+    body = {"version": "3", "type": "Resource", "data": results, "nodeId": config.nodeID}
+    return Response(json.dumps(body), mimetype="application/json")
