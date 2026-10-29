@@ -18,18 +18,18 @@ config = MainConfig.instance()
 def endpoints() -> List[dict]:
     with groups._db().connect() as connection:
         rows = connection.execute(text(
-            'SELECT "User".uid, "User".callsign, "Event".start FROM "User" '
+            'SELECT "User".uid, "User".callsign, "User"."CN", "Event".start FROM "User" '
             'LEFT JOIN "Event" ON "Event".uid = "User"."CoT_id"')).all()
     now = timestamp(datetime.datetime.utcnow())
     return [{
         "callsign": callsign or "",
         "uid": uid,
-        # FTS doesn't record which account a streaming client belongs to
-        "username": "",
+        # the account of the client certificate; TCP clients have none
+        "username": groups.username_for_common_name(common_name) or "",
         # the contact CoT's start, which is when the client connected
         "lastEventTime": start or now,
         "lastStatus": "Connected",
-    } for uid, callsign, start in rows if uid]
+    } for uid, callsign, common_name, start in rows if uid]
 
 
 def response() -> dict:

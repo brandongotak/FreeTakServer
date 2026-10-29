@@ -2,6 +2,7 @@ from asyncio import Queue
 import threading
 import time
 import traceback
+from FreeTAKServer.core.util import connected_devices
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
 from multiprocessing.pool import ThreadPool
@@ -731,6 +732,12 @@ class SSLCoTServiceMain(DigitalPyService):
                         self.logger.info(f"disconnecting disabled user {self.usernames_by_uid.get(data_object.clientInformation)!r}")
                         self.handle_disconnection(data_object.clientInformation)
                         continue
+                    # an admin disconnected the device on the Devices page
+                    if connected_devices.should_disconnect(data_object.clientInformation):
+                        self.logger.info(f"disconnecting {data_object.clientInformation} as an admin asked")
+                        self.handle_disconnection(data_object.clientInformation)
+                        continue
+                    connected_devices.heard("ssl", data_object.clientInformation, data_object.xmlString)
                     # Process the raw CoT data and serialize it
                     self.component_handler(data_object.xmlString, data_object.clientInformation)
                     self.logger.debug(f"CoT serialized {data_object.xmlString}")
@@ -767,6 +774,7 @@ class SSLCoTServiceMain(DigitalPyService):
                     if connection.model_object is not None and connection.model_object.uid == uid]:
             del self.connections[key]
         self.usernames_by_uid.pop(uid, None)
+        connected_devices.gone("ssl", uid)
 
         iam_disconnect_request = self.client_disconnection_controller.create_iam_disconnect_request(connection_id)
         self.subject_send_request(iam_disconnect_request, APPLICATION_PROTOCOL)
@@ -788,6 +796,7 @@ class SSLCoTServiceMain(DigitalPyService):
             )
             self.client_connection_controller.save_client_to_db(client_information, self.dbController)
             self.usernames_by_uid[client_information.modelObject.uid] = client_connection.username
+            connected_devices.connected("ssl", client_information.modelObject.uid)
             # certificates of disabled users are refused
             if ui_access.is_disabled(client_connection.username):
                 self.logger.info(f"refusing connection from disabled user {client_connection.username!r}")

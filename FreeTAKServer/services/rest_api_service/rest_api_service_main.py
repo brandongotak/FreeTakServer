@@ -32,6 +32,7 @@ from FreeTAKServer.core.configuration.CreateLoggerController import CreateLogger
 from FreeTAKServer.core.util import certificate_generation
 from FreeTAKServer.core.util import enrollment_setup, server_cert_names
 from FreeTAKServer.core.util import connection_message
+from FreeTAKServer.core.util import connected_devices
 from FreeTAKServer.core.util import groups
 from FreeTAKServer.core.util import ui_access
 from FreeTAKServer.core.util import enroll_codes
@@ -410,6 +411,45 @@ def kickVideoStream(jsondata):
         video_feeds.kick_publisher(name)
         return f"disconnected the publisher of {name}"
     emit_video_status(kick)
+
+
+def emit_connected_devices(message=None, error=None):
+    try:
+        status = {"devices": connected_devices.devices()}
+    except Exception as e:
+        logger.error(f"listing connected devices failed: {e}")
+        status = {"devices": [], "error": "could not list the connected devices"}
+    if message:
+        status["message"] = message
+    if error:
+        status["error"] = error
+    emit('connectedDevicesUpdate', json.dumps(status))
+
+
+@socketio.on('connectedDevices')
+@socket_auth(session=session)
+def connectedDevices(empty=None):
+    """ list the connected devices: who, on what, and when they were last heard from
+    """
+    emit_connected_devices()
+
+
+@socketio.on('disconnectDevice')
+@socket_auth(session=session)
+def disconnectDevice(jsondata):
+    """ drop a device's connection on its next message; it can reconnect
+    """
+    data = json.loads(jsondata)
+    uid = str(data.get("uid", ""))
+    if not uid:
+        emit_connected_devices(error="no device given")
+        return
+    try:
+        connected_devices.request_disconnect(uid)
+    except OSError as e:
+        emit_connected_devices(error=f"could not disconnect the device: {e}")
+        return
+    emit_connected_devices(message=f"{data.get('callsign') or uid} will be disconnected within about 15 seconds")
 
 
 @socketio.on('setVideoAutoAdd')

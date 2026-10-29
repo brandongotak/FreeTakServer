@@ -14,6 +14,7 @@ from FreeTAKServer.services.tcp_cot_service.controllers.send_component_data_cont
 )
 
 import traceback
+from FreeTAKServer.core.util import connected_devices
 from FreeTAKServer.core.util import groups
 
 from digitalpy.core.service_management.digitalpy_service import DigitalPyService
@@ -733,6 +734,12 @@ class TCPCoTServiceMain(DigitalPyService):
                     elif data_object.xmlString == b"":
                         self.handle_disconnection(data_object.clientInformation)
                         continue
+                    # an admin disconnected the device on the Devices page
+                    if connected_devices.should_disconnect(data_object.clientInformation):
+                        self.logger.info(f"disconnecting {data_object.clientInformation} as an admin asked")
+                        self.handle_disconnection(data_object.clientInformation)
+                        continue
+                    connected_devices.heard("tcp", data_object.clientInformation, data_object.xmlString)
                     # Process the raw CoT data and serialize it
                     self.component_handler(data_object.xmlString, data_object.clientInformation)
                     self.logger.debug(f"finished processing {data_object.xmlString}")
@@ -767,6 +774,7 @@ class TCPCoTServiceMain(DigitalPyService):
                     if connection.model_object is not None and connection.model_object.uid == uid]:
             del self.connections[key]
         self.usernames_by_uid.pop(uid, None)
+        connected_devices.gone("tcp", uid)
 
         iam_disconnect_request = self.client_disconnection_controller.create_iam_disconnect_request(connection_id)
         self.subject_send_request(iam_disconnect_request, APPLICATION_PROTOCOL)
@@ -788,6 +796,7 @@ class TCPCoTServiceMain(DigitalPyService):
             )
             self.client_connection_controller.save_client_to_db(client_information, self.dbController)
             self.usernames_by_uid[client_information.modelObject.uid] = client_connection.username
+            connected_devices.connected("tcp", client_information.modelObject.uid)
             
             iam_request = self.client_connection_controller.create_iam_request(client_connection)
             self.subject_send_request(iam_request, APPLICATION_PROTOCOL)

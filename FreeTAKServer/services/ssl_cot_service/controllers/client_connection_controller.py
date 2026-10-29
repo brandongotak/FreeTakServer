@@ -85,10 +85,8 @@ class ClientConnectionController(Controller):
 
     def save_client_to_db(self, clientInformation, db_controller):
         try:
-            if hasattr(clientInformation.socket, "getpeercert"):
-                cn = "placeholder"
-            else:
-                cn = None
+            # the certificate CN tells the Devices page which user this is
+            cn = groups.peer_common_name(clientInformation.socket) or "placeholder"
             CoT_row = EventTableController().convert_model_to_row(clientInformation.modelObject)
             db_controller.create_user(
                     uid=clientInformation.modelObject.uid,
